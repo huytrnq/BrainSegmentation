@@ -62,13 +62,13 @@ class BrainMRIDataset(Dataset):
 
 
 class BrainMRISliceDataset(Dataset):
-    """PyTorch dataset for loading 2D slices from subfolders of 3D MRI volumes."""
+    """Dataset for 2D MRI slices with Albumentations transformations."""
     def __init__(self, base_dir, slice_axis=2, transform=None):
         """
         Args:
-            base_dir (str): Base directory containing patient subfolders.
+            base_dir (str): Path to the base directory containing patient subfolders.
             slice_axis (int): Axis to extract slices (0=axial, 1=coronal, 2=sagittal).
-            transform (callable, optional): Optional transform to apply to slices.
+            transform (callable, optional): Transformations to apply to images and labels.
         """
         self.base_dir = base_dir
         self.slice_axis = slice_axis
@@ -79,12 +79,10 @@ class BrainMRISliceDataset(Dataset):
         for subfolder in os.listdir(base_dir):
             subfolder_path = os.path.join(base_dir, subfolder)
             if os.path.isdir(subfolder_path):
-                # Identify image and label files based on 'seg' in filename
-                image_path = None
-                label_path = None
+                image_path, label_path = None, None
                 for file_name in os.listdir(subfolder_path):
                     file_path = os.path.join(subfolder_path, file_name)
-                    if file_name.startswith("."):  # Skip hidden files like .DS_Store
+                    if file_name.startswith("."):
                         continue
                     if "seg" in file_name.lower():
                         label_path = file_path
@@ -96,7 +94,7 @@ class BrainMRISliceDataset(Dataset):
         # Compute the total number of slices across all volumes
         self.slice_info = []  # (volume_idx, slice_idx) for each slice
         for volume_idx, (image_path, label_path) in enumerate(self.image_label_pairs):
-            image = nib.load(image_path).get_fdata()  # Load to get shape
+            image = nib.load(image_path).get_fdata()
             num_slices = image.shape[self.slice_axis]
             self.slice_info.extend([(volume_idx, slice_idx) for slice_idx in range(num_slices)])
 
@@ -108,7 +106,7 @@ class BrainMRISliceDataset(Dataset):
         volume_idx, slice_idx = self.slice_info[idx]
         image_path, label_path = self.image_label_pairs[volume_idx]
 
-        # Load the corresponding 3D image and label
+        # Load the 3D image and label
         image = nib.load(image_path).get_fdata().astype(np.float32)
         label = nib.load(label_path).get_fdata().astype(np.int64)
 
@@ -123,8 +121,13 @@ class BrainMRISliceDataset(Dataset):
             image_slice = image[:, :, slice_idx]
             label_slice = label[:, :, slice_idx]
 
-        # Apply transformations if needed
+        # Normalize the image slice to [0, 1]
+        image_slice = (image_slice - np.min(image_slice)) / (np.max(image_slice) - np.min(image_slice))
+
+        # Apply Albumentations transformations if needed
         if self.transform:
-            image_slice = self.transform(image_slice)
+            augmented = self.transform(image=image_slice, mask=label_slice)
+            image_slice = augmented['image']
+            label_slice = augmented['mask']
 
         return image_slice, label_slice
