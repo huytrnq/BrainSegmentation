@@ -3,132 +3,113 @@
 import torch
 
 
-def load_data_file(input_file):
-    """Load image paths and labels from txt file.
+def calculate_batch_accuracy(predictions, labels, include_background=True):
+    """
+    Calculate batch accuracy with an option to include or exclude background class.
 
     Args:
-        input_file (str): Path to the input file.
+        predictions (torch.Tensor): Predicted class labels (B, H, W, D).
+        labels (torch.Tensor): Ground truth labels (B, H, W, D).
+        include_background (bool): Whether to include background class in accuracy calculation.
 
     Returns:
-        list: List of image paths.
-        list: List of labels.
+        float: Batch accuracy as a value between 0 and 1.
     """
-    paths, labels = [], []
-    with open(input_file, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            path, class_id = line.rsplit(" ", 1)
-            # Append the path and label
-            paths.append(path)
-            labels.append(int(class_id))
+    predictions = torch.argmax(predictions, dim=1)  # Get predicted class
+    if not include_background:
+        mask = labels > 0  # Exclude background (assume class 0 is background)
+        predictions = predictions[mask]
+        labels = labels[mask]
 
-    return paths, labels
+    if len(labels) == 0:  # If no foreground voxels exist, return 0 accuracy
+        return 0.0
+
+    accuracy = (predictions == labels).float().mean().item()
+    return accuracy
 
 
-def train(model, dataloader, criterion, optimizer, device, monitor):
+def train(model, train_loader, criterion, optimizer, device, monitor, include_background=True):
     """
-    Train the model for one epoch.
+    Train the model for one epoch and track metrics.
 
     Args:
-        model: The PyTorch model.
-        dataloader: DataLoader for the training data.
+        model: PyTorch model to train.
+        train_loader: DataLoader for the training dataset.
         criterion: Loss function.
-        optimizer: Optimizer for the model.
-        device: Device to run the computations on (CPU or GPU).
-        monitor: Instance of MetricsMonitor to track metrics.
+        optimizer: Optimizer for updating model weights.
+        device: Device to run the training on (CPU or GPU).
+        monitor: MetricsMonitor object for tracking metrics.
+        include_background (bool): Whether to include background in accuracy calculation.
+
+    Returns:
+        dict: Dictionary with average metrics for the epoch.
     """
     model.train()
     monitor.reset()
-    total_iterations = len(dataloader)
 
-    for iteration, (inputs, labels) in enumerate(dataloader, start=1):
-        inputs, labels = inputs.to(device), labels.to(device)
+    for batch_idx, (images, labels) in enumerate(train_loader):
+        images, labels = images.to(device), labels.to(device)
 
         # Forward pass
-        outputs = model(inputs)
+        outputs = model(images)
         loss = criterion(outputs, labels)
 
-        # Backward pass
+        # Backward pass and optimization
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
-        # Metrics
-        _, predicted = torch.max(outputs, 1)
-        correct = (predicted == labels).sum().item()
-        accuracy = correct / labels.size(0)
+        # Calculate batch accuracy
+        batch_accuracy = calculate_batch_accuracy(outputs, labels, include_background)
 
-        monitor.update("loss", loss.item(), count=labels.size(0))
-        monitor.update("accuracy", accuracy, count=labels.size(0))
-        monitor.print_iteration(iteration, total_iterations, phase="Train")
+        # Update monitor with loss and accuracy
+        monitor.update("loss", loss.item(), count=len(images))
+        monitor.update("accuracy", batch_accuracy, count=len(images))
+
+        # Print iteration metrics
+        monitor.print_iteration(batch_idx + 1, len(train_loader), phase="Train")
+
+    # Print final metrics for the epoch
     monitor.print_final(phase="Train")
+    return {metric: monitor.compute_average(metric) for metric in monitor.metrics}
 
 
-def validate(model, dataloader, criterion, device, monitor):
+def validate(model, valid_loader, criterion, device, monitor, include_background=True):
     """
-    Validate the model on the validation dataset.
+    Validate the model for one epoch and track metrics.
 
     Args:
-        model: The PyTorch model.
-        dataloader: DataLoader for the validation data.
+        model: PyTorch model to evaluate.
+        valid_loader: DataLoader for the validation dataset.
         criterion: Loss function.
-        device: Device to run the computations on (CPU or GPU).
-        monitor: Instance of MetricsMonitor to track metrics.
+        device: Device to run the evaluation on (CPU or GPU).
+        monitor: MetricsMonitor object for tracking metrics.
+        include_background (bool): Whether to include background in accuracy calculation.
+
+    Returns:
+        dict: Dictionary with average metrics for the validation epoch.
     """
     model.eval()
     monitor.reset()
-    total_iterations = len(dataloader)
 
     with torch.no_grad():
-        for iteration, (inputs, labels) in enumerate(dataloader, start=1):
-            inputs, labels = inputs.to(device), labels.to(device)
+        for batch_idx, (images, labels) in enumerate(valid_loader):
+            images, labels = images.to(device), labels.to(device)
 
             # Forward pass
-            outputs = model(inputs)
+            outputs = model(images)
             loss = criterion(outputs, labels)
 
-            # Metrics
-            _, predicted = torch.max(outputs, 1)
-            correct = (predicted == labels).sum().item()
-            accuracy = correct / labels.size(0)
+            # Calculate batch accuracy
+            batch_accuracy = calculate_batch_accuracy(outputs, labels, include_background)
 
-            monitor.update("loss", loss.item(), count=labels.size(0))
-            monitor.update("accuracy", accuracy, count=labels.size(0))
-            monitor.print_iteration(iteration, total_iterations, phase="Validation")
+            # Update monitor with loss and accuracy
+            monitor.update("loss", loss.item(), count=len(images))
+            monitor.update("accuracy", batch_accuracy, count=len(images))
+
+            # Print iteration metrics
+            monitor.print_iteration(batch_idx + 1, len(valid_loader), phase="Validation")
+
+    # Print final metrics for the validation epoch
     monitor.print_final(phase="Validation")
-
-
-def test(model, dataloader, criterion, device, monitor):
-    """
-    Test the model on the test dataset.
-
-    Args:
-        model: The PyTorch model.
-        dataloader: DataLoader for the test data.
-        criterion: Loss function.
-        device: Device to run the computations on (CPU or GPU).
-        monitor: Instance of MetricsMonitor to track metrics.
-    """
-    model.eval()
-    monitor.reset()
-
-    total_iterations = len(dataloader)
-    with torch.no_grad():
-        for iteration, (inputs, labels) in enumerate(dataloader, start=1):
-            inputs, labels = inputs.to(device), labels.to(device)
-
-            # Forward pass
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-
-            # Metrics
-            _, predicted = torch.max(outputs, 1)
-            correct = (predicted == labels).sum().item()
-            accuracy = correct / labels.size(0)
-
-            monitor.update("loss", loss.item(), count=labels.size(0))
-            monitor.update("accuracy", accuracy, count=labels.size(0))
-            monitor.print_iteration(iteration, total_iterations, phase="Test")
-    monitor.print_final(phase="Test")
+    return {metric: monitor.compute_average(metric) for metric in monitor.metrics}
