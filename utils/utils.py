@@ -3,32 +3,29 @@
 import torch
 
 
-def calculate_batch_accuracy(predictions, labels, include_background=True):
+def calculate_batch_accuracy(predictions, labels):
     """
     Calculate batch accuracy with an option to include or exclude background class.
 
     Args:
         predictions (torch.Tensor): Predicted class labels (B, H, W, D).
         labels (torch.Tensor): Ground truth labels (B, H, W, D).
-        include_background (bool): Whether to include background class in accuracy calculation.
 
     Returns:
         float: Batch accuracy as a value between 0 and 1.
     """
-    predictions = torch.argmax(predictions, dim=1)  # Get predicted class
-    if not include_background:
-        mask = labels > 0  # Exclude background (assume class 0 is background)
-        predictions = predictions[mask]
-        labels = labels[mask]
 
     if len(labels) == 0:  # If no foreground voxels exist, return 0 accuracy
         return 0.0
+    # Convert one-hot predictions and labels to class indices
+    predictions = predictions.argmax(dim=1)  # Shape: (batch_size, H, W)
+    labels = labels.argmax(dim=1)  # Shape: (batch_size, H, W)
 
     accuracy = (predictions == labels).float().mean().item()
     return accuracy
 
 
-def train(model, train_loader, criterion, optimizer, device, monitor, include_background=True):
+def train(model, train_loader, criterion, optimizer, device, monitor):
     """
     Train the model for one epoch and track metrics.
 
@@ -39,7 +36,6 @@ def train(model, train_loader, criterion, optimizer, device, monitor, include_ba
         optimizer: Optimizer for updating model weights.
         device: Device to run the training on (CPU or GPU).
         monitor: MetricsMonitor object for tracking metrics.
-        include_background (bool): Whether to include background in accuracy calculation.
 
     Returns:
         dict: Dictionary with average metrics for the epoch.
@@ -60,7 +56,7 @@ def train(model, train_loader, criterion, optimizer, device, monitor, include_ba
         optimizer.step()
 
         # Calculate batch accuracy
-        batch_accuracy = calculate_batch_accuracy(outputs, labels, include_background)
+        batch_accuracy = calculate_batch_accuracy(outputs, labels)
 
         # Update monitor with loss and accuracy
         monitor.update("loss", loss.item(), count=len(images))
@@ -74,7 +70,7 @@ def train(model, train_loader, criterion, optimizer, device, monitor, include_ba
     return {metric: monitor.compute_average(metric) for metric in monitor.metrics}
 
 
-def validate(model, valid_loader, criterion, device, monitor, include_background=True):
+def validate(model, valid_loader, criterion, device, monitor):
     """
     Validate the model for one epoch and track metrics.
 
@@ -84,7 +80,6 @@ def validate(model, valid_loader, criterion, device, monitor, include_background
         criterion: Loss function.
         device: Device to run the evaluation on (CPU or GPU).
         monitor: MetricsMonitor object for tracking metrics.
-        include_background (bool): Whether to include background in accuracy calculation.
 
     Returns:
         dict: Dictionary with average metrics for the validation epoch.
@@ -101,7 +96,7 @@ def validate(model, valid_loader, criterion, device, monitor, include_background
             loss = criterion(outputs, labels)
 
             # Calculate batch accuracy
-            batch_accuracy = calculate_batch_accuracy(outputs, labels, include_background)
+            batch_accuracy = calculate_batch_accuracy(outputs, labels)
 
             # Update monitor with loss and accuracy
             monitor.update("loss", loss.item(), count=len(images))

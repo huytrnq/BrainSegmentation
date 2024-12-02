@@ -63,16 +63,18 @@ class BrainMRIDataset(Dataset):
 
 class BrainMRISliceDataset(Dataset):
     """Dataset for 2D MRI slices with Albumentations transformations."""
-    def __init__(self, base_dir, slice_axis=2, transform=None):
+    def __init__(self, base_dir, slice_axis=2, transform=None, num_classes=3):
         """
         Args:
             base_dir (str): Path to the base directory containing patient subfolders.
             slice_axis (int): Axis to extract slices (0=axial, 1=coronal, 2=sagittal).
             transform (callable, optional): Transformations to apply to images and labels.
+            num_classes (int): Number of classes in the segmentation mask.
         """
         self.base_dir = base_dir
         self.slice_axis = slice_axis
         self.transform = transform
+        self.num_classes = 3  # Background, CSF, GM, WM
 
         # Collect paths for images and labels
         self.image_label_pairs = []
@@ -101,6 +103,29 @@ class BrainMRISliceDataset(Dataset):
     def __len__(self):
         return len(self.slice_info)
 
+    def mask_to_onehot(self, mask):
+        """
+        Convert a segmentation mask to one-hot encoded format.
+
+        Args:
+            mask (torch.Tensor): Segmentation mask of shape (H, W) with class indices.
+
+        Returns:
+            torch.Tensor: One-hot encoded tensor of shape (num_classes, H, W).
+        """
+        # Ensure mask is of dtype int64
+        mask = mask.to(torch.int64)
+
+        # Initialize one-hot tensor with zeros
+        onehot = torch.zeros((self.num_classes + 1, *mask.shape), dtype=torch.float32, device=mask.device)
+
+        # Scatter 1 at the corresponding class indices
+        onehot.scatter_(0, mask.unsqueeze(0), 1)
+        # Exclude the background class
+        onehot = onehot[1:, ...]
+
+        return onehot
+
     def __getitem__(self, idx):
         # Retrieve volume and slice index
         volume_idx, slice_idx = self.slice_info[idx]
@@ -121,13 +146,13 @@ class BrainMRISliceDataset(Dataset):
             image_slice = image[:, :, slice_idx]
             label_slice = label[:, :, slice_idx]
 
-        # Normalize the image slice to [0, 1]
-        image_slice = (image_slice - np.min(image_slice)) / (np.max(image_slice) - np.min(image_slice))
-
         # Apply Albumentations transformations if needed
         if self.transform:
             augmented = self.transform(image=image_slice, mask=label_slice)
             image_slice = augmented['image']
             label_slice = augmented['mask']
+        image_slice = image_slice.repeat(3, 1, 1)  # Convert to 3-channel image
+        label_slice = self.mask_to_onehot(label_slice).squeeze(-1)
+        label_slice = label_slice.float()  # Convert to floating point type
 
         return image_slice, label_slice
