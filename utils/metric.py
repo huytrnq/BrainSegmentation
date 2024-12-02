@@ -163,6 +163,9 @@ def accuracy(predictions, labels):
     # Convert one-hot predictions and labels to class indices
     predictions = predictions.argmax(dim=1)  # Shape: (batch_size, H, W)
     labels = labels.argmax(dim=1)  # Shape: (batch_size, H, W)
+    
+    # exclude background class
+    
 
     accuracy = (predictions == labels).float().mean().item()
     return accuracy

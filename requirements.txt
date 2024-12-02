@@ -2,3 +2,5 @@ Pillow==11.0.0
 torch==2.5.1
 mlflow==2.18.0
 torchvision==0.20.1
+albumentations==1.4.21
+nibabel==5.3.2
