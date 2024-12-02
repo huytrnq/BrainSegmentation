@@ -1,28 +1,7 @@
 """Utility functions for training and testing the model."""
 
 import torch
-
-
-def calculate_batch_accuracy(predictions, labels):
-    """
-    Calculate batch accuracy with an option to include or exclude background class.
-
-    Args:
-        predictions (torch.Tensor): Predicted class labels (B, H, W, D).
-        labels (torch.Tensor): Ground truth labels (B, H, W, D).
-
-    Returns:
-        float: Batch accuracy as a value between 0 and 1.
-    """
-
-    if len(labels) == 0:  # If no foreground voxels exist, return 0 accuracy
-        return 0.0
-    # Convert one-hot predictions and labels to class indices
-    predictions = predictions.argmax(dim=1)  # Shape: (batch_size, H, W)
-    labels = labels.argmax(dim=1)  # Shape: (batch_size, H, W)
-
-    accuracy = (predictions == labels).float().mean().item()
-    return accuracy
+from utils.metric import accuracy, dice_coefficient
 
 
 def train(model, train_loader, criterion, optimizer, device, monitor):
@@ -56,11 +35,13 @@ def train(model, train_loader, criterion, optimizer, device, monitor):
         optimizer.step()
 
         # Calculate batch accuracy
-        batch_accuracy = calculate_batch_accuracy(outputs, labels)
+        batch_accuracy = accuracy(outputs, labels)
+        dice_score = dice_coefficient(labels, outputs)
 
         # Update monitor with loss and accuracy
         monitor.update("loss", loss.item(), count=len(images))
         monitor.update("accuracy", batch_accuracy, count=len(images))
+        monitor.update("dice_score", dice_score, count=len(images))
 
         # Print iteration metrics
         monitor.print_iteration(batch_idx + 1, len(train_loader), phase="Train")
@@ -96,11 +77,13 @@ def validate(model, valid_loader, criterion, device, monitor):
             loss = criterion(outputs, labels)
 
             # Calculate batch accuracy
-            batch_accuracy = calculate_batch_accuracy(outputs, labels)
+            batch_accuracy = accuracy(outputs, labels)
+            dice_score = dice_coefficient(labels, outputs)
 
             # Update monitor with loss and accuracy
             monitor.update("loss", loss.item(), count=len(images))
             monitor.update("accuracy", batch_accuracy, count=len(images))
+            monitor.update("dice_score", dice_score, count=len(images))
 
             # Print iteration metrics
             monitor.print_iteration(batch_idx + 1, len(valid_loader), phase="Validation")

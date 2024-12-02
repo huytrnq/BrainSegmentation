@@ -128,3 +128,41 @@ class MetricsMonitor:
         torch.save(model.state_dict(), self.save_path)
         print(f"\nModel improved and saved to {self.save_path}!")
 
+
+def dice_coefficient(labels, predictions, eps=1e-7):
+    """
+    Compute the Dice coefficient for a batch of ground truth masks and predicted masks.
+
+    Args:
+        labels (torch.Tensor): Ground truth masks (shape: [N, *]).
+        predictions (torch.Tensor): Predicted masks (shape: [N, *]).
+        eps (float): Smoothing value to avoid division by zero.
+
+    Returns:
+        torch.Tensor: Dice coefficient (mean over the batch).
+    """
+    intersection = torch.sum(labels * predictions)
+    union = torch.sum(labels) + torch.sum(predictions)
+    dice = (2.0 * intersection + eps) / (union + eps)
+    return dice.mean()
+
+def accuracy(predictions, labels):
+    """
+    Calculate batch accuracy with an option to include or exclude background class.
+
+    Args:
+        predictions (torch.Tensor): Predicted class labels (B, H, W, D).
+        labels (torch.Tensor): Ground truth labels (B, H, W, D).
+
+    Returns:
+        float: Batch accuracy as a value between 0 and 1.
+    """
+
+    if len(labels) == 0:  # If no foreground voxels exist, return 0 accuracy
+        return 0.0
+    # Convert one-hot predictions and labels to class indices
+    predictions = predictions.argmax(dim=1)  # Shape: (batch_size, H, W)
+    labels = labels.argmax(dim=1)  # Shape: (batch_size, H, W)
+
+    accuracy = (predictions == labels).float().mean().item()
+    return accuracy
