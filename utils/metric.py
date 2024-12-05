@@ -129,43 +129,67 @@ class MetricsMonitor:
         print(f"\nModel improved and saved to {self.save_path}!")
 
 
-def dice_coefficient(labels, predictions, eps=1e-7):
+def dice_coefficient(labels, predictions, smooth=1e-7):
     """
-    Compute the Dice coefficient for a batch of ground truth masks and predicted masks.
+    Calculate the Dice Score for 2D one-hot encoded predictions and labels.
 
     Args:
-        labels (torch.Tensor): Ground truth masks (shape: [N, *]).
-        predictions (torch.Tensor): Predicted masks (shape: [N, *]).
-        eps (float): Smoothing value to avoid division by zero.
+        predictions (torch.Tensor): Predicted one-hot encoded tensor of shape (N, C, H, W).
+        labels (torch.Tensor): Ground truth one-hot encoded tensor of shape (N, C, H, W).
+        smooth (float): Smoothing factor to prevent division by zero.
 
     Returns:
-        torch.Tensor: Dice coefficient (mean over the batch).
+        torch.Tensor: Dice score for each class.
     """
-    intersection = torch.sum(labels * predictions)
-    union = torch.sum(labels) + torch.sum(predictions)
-    dice = (2.0 * intersection + eps) / (union + eps)
-    return dice.mean()
+    # Convert predictions to one-hot encoded masks    
+    # Ensure predictions and labels are float tensors
+    predictions = predictions.float()
+    labels = labels.float()
 
-def accuracy(predictions, labels):
+    # Calculate intersection and union
+    intersection = torch.sum(predictions * labels, dim=(2, 3))  # Sum over spatial dimensions H, W
+    union = torch.sum(predictions, dim=(2, 3)) + torch.sum(labels, dim=(2, 3))
+
+    # Compute Dice score
+    dice = (2.0 * intersection + smooth) / (union + smooth)
+
+    # Average over the batch
+    return dice.mean(dim=0)
+
+def accuracy(predictions, labels, background_class=-1):
     """
-    Calculate batch accuracy with an option to include or exclude background class.
+    Calculate the accuracy for segmentation.
 
     Args:
-        predictions (torch.Tensor): Predicted class labels (B, H, W, D).
-        labels (torch.Tensor): Ground truth labels (B, H, W, D).
+        predictions (torch.Tensor): Predicted class indices of shape (N, H, W) or (N, H, W, D).
+        labels (torch.Tensor): Ground truth class indices of shape (N, H, W) or (N, H, W, D).
+        background_class (int): Index of the background class.
 
     Returns:
-        float: Batch accuracy as a value between 0 and 1.
+        float: Accuracy score.
     """
+    # Convert probabilities to class predictions
+    num_classes = predictions.size(1)  # Number of classes
+    predictions = torch.argmax(predictions, dim=1)
+    # Step 2: Convert class predictions to one-hot encoding
+    one_hot_pred = torch.nn.functional.one_hot(predictions, num_classes=num_classes)
+    one_hot_pred = one_hot_pred.permute(0, 3, 1, 2)
 
-    if len(labels) == 0:  # If no foreground voxels exist, return 0 accuracy
-        return 0.0
-    # Convert one-hot predictions and labels to class indices
-    predictions = predictions.argmax(dim=1)  # Shape: (batch_size, H, W)
-    labels = labels.argmax(dim=1)  # Shape: (batch_size, H, W)
     
-    # exclude background class
-    
+    # Ensure predictions and labels have the same shape
+    if one_hot_pred.shape != labels.shape:
+        raise ValueError("Shape of predictions and labels must match.")
 
-    accuracy = (predictions == labels).float().mean().item()
+    # Create a mask to ignore the background class
+    mask = labels != background_class
+
+    # Mask predictions and labels
+    masked_predictions = one_hot_pred[mask]
+    masked_labels = labels[mask]
+
+    # Compute accuracy
+    correct = (masked_predictions == masked_labels).sum().item()
+    total = mask.sum().item()
+
+    accuracy = correct / total if total > 0 else 0.0
     return accuracy

@@ -27,6 +27,7 @@ def train(model, train_loader, criterion, optimizer, device, monitor):
 
         # Forward pass
         outputs = model(images)
+        outputs = torch.sigmoid(outputs)
         loss = criterion(outputs, labels)
 
         # Backward pass and optimization
@@ -41,7 +42,7 @@ def train(model, train_loader, criterion, optimizer, device, monitor):
         # Update monitor with loss and accuracy
         monitor.update("loss", loss.item(), count=len(images))
         monitor.update("accuracy", batch_accuracy, count=len(images))
-        monitor.update("dice_score", dice_score, count=len(images))
+        monitor.update("dice_score", dice_score.mean().item(), count=len(images))
 
         # Print iteration metrics
         monitor.print_iteration(batch_idx + 1, len(train_loader), phase="Train")
@@ -74,6 +75,7 @@ def validate(model, valid_loader, criterion, device, monitor):
 
             # Forward pass
             outputs = model(images)
+            outputs = torch.sigmoid(outputs)
             loss = criterion(outputs, labels)
 
             # Calculate batch accuracy
@@ -83,7 +85,7 @@ def validate(model, valid_loader, criterion, device, monitor):
             # Update monitor with loss and accuracy
             monitor.update("loss", loss.item(), count=len(images))
             monitor.update("accuracy", batch_accuracy, count=len(images))
-            monitor.update("dice_score", dice_score, count=len(images))
+            monitor.update("dice_score", dice_score.mean().item(), count=len(images))
 
             # Print iteration metrics
             monitor.print_iteration(batch_idx + 1, len(valid_loader), phase="Validation")

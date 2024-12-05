@@ -151,7 +151,7 @@ class BrainMRISliceDataset(Dataset):
             augmented = self.transform(image=image_slice, mask=label_slice)
             image_slice = augmented['image']
             label_slice = augmented['mask']
-        image_slice = image_slice.repeat(3, 1, 1)  # Convert to 3-channel image
+        # image_slice = image_slice.repeat(3, 1, 1)  # Convert to 3-channel image
         label_slice = self.mask_to_onehot(label_slice).squeeze(-1)
         label_slice = label_slice.float()  # Convert to floating point type
 
