@@ -24,10 +24,12 @@ def train(model, train_loader, criterion, optimizer, device, monitor):
 
     for batch_idx, (images, labels) in enumerate(train_loader):
         images, labels = images.to(device), labels.to(device)
+        
+        # Squeeze the channel dimension of labels
+        labels = labels.squeeze(1).long()  # Shape becomes [batch_size, height, width]
 
         # Forward pass
         outputs = model(images)
-        outputs = torch.sigmoid(outputs)
         loss = criterion(outputs, labels)
 
         # Backward pass and optimization
@@ -36,12 +38,11 @@ def train(model, train_loader, criterion, optimizer, device, monitor):
         optimizer.step()
 
         # Calculate batch accuracy
-        batch_accuracy = accuracy(outputs, labels)
-        dice_score = dice_coefficient(labels, outputs)
+        dice_score = dice_coefficient(outputs, labels)
 
         # Update monitor with loss and accuracy
         monitor.update("loss", loss.item(), count=len(images))
-        monitor.update("accuracy", batch_accuracy, count=len(images))
+        # monitor.update("accuracy", batch_accuracy, count=len(images))
         monitor.update("dice_score", dice_score.mean().item(), count=len(images))
 
         # Print iteration metrics
@@ -72,19 +73,21 @@ def validate(model, valid_loader, criterion, device, monitor):
     with torch.no_grad():
         for batch_idx, (images, labels) in enumerate(valid_loader):
             images, labels = images.to(device), labels.to(device)
+            
+            # Squeeze the channel dimension of labels
+            labels = labels.squeeze(1).long()  # Shape becomes [batch_size, height, width]
 
             # Forward pass
             outputs = model(images)
-            outputs = torch.sigmoid(outputs)
+            # outputs = torch.sigmoid(outputs)
             loss = criterion(outputs, labels)
 
             # Calculate batch accuracy
-            batch_accuracy = accuracy(outputs, labels)
-            dice_score = dice_coefficient(labels, outputs)
+            dice_score = dice_coefficient(outputs, labels)
 
             # Update monitor with loss and accuracy
             monitor.update("loss", loss.item(), count=len(images))
-            monitor.update("accuracy", batch_accuracy, count=len(images))
+            # monitor.update("accuracy", batch_accuracy, count=len(images))
             monitor.update("dice_score", dice_score.mean().item(), count=len(images))
 
             # Print iteration metrics

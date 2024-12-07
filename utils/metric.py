@@ -3,6 +3,7 @@ This module contains a class for tracking metrics and implementing early stoppin
 It is used to monitor the performance of the model during training and validation.
 """
 
+import numpy as np
 import torch
 
 
@@ -129,32 +130,40 @@ class MetricsMonitor:
         print(f"\nModel improved and saved to {self.save_path}!")
 
 
-def dice_coefficient(labels, predictions, smooth=1e-7):
+def dice_coefficient(predictions, labels, num_classes=4, smooth=1e-6):
     """
-    Calculate the Dice Score for 2D one-hot encoded predictions and labels.
-
+    Calculate Dice Score for each class.
     Args:
-        predictions (torch.Tensor): Predicted one-hot encoded tensor of shape (N, C, H, W).
-        labels (torch.Tensor): Ground truth one-hot encoded tensor of shape (N, C, H, W).
-        smooth (float): Smoothing factor to prevent division by zero.
-
+        predictions (torch.Tensor): Model predictions (logits), shape [batch_size, num_classes, height, width].
+        labels (torch.Tensor): Ground truth labels, shape [batch_size, height, width].
+        num_classes (int): Number of classes including background.
+        smooth (float): Smoothing factor to avoid division by zero.
     Returns:
-        torch.Tensor: Dice score for each class.
+        list: Dice score for each class.
     """
-    # Convert predictions to one-hot encoded masks    
-    # Ensure predictions and labels are float tensors
-    predictions = predictions.float()
-    labels = labels.float()
+    # Convert logits to probabilities
+    predictions = torch.softmax(predictions.float(), dim=1)  # Shape [batch_size, num_classes, height, width]
 
-    # Calculate intersection and union
-    intersection = torch.sum(predictions * labels, dim=(2, 3))  # Sum over spatial dimensions H, W
-    union = torch.sum(predictions, dim=(2, 3)) + torch.sum(labels, dim=(2, 3))
+    # Convert labels to one-hot encoding
+    one_hot_labels = torch.nn.functional.one_hot(labels, num_classes).permute(0, 3, 1, 2).float()
+    # Shape [batch_size, num_classes, height, width]
 
-    # Compute Dice score
-    dice = (2.0 * intersection + smooth) / (union + smooth)
+    dice_scores = []
+    for c in range(num_classes):
+        # Extract probabilities and labels for the current class
+        pred = predictions[:, c]  # Shape [batch_size, height, width]
+        true = one_hot_labels[:, c]  # Shape [batch_size, height, width]
 
-    # Average over the batch
-    return dice.mean(dim=0)
+        # Calculate intersection and union
+        intersection = (pred * true).sum(dim=(1, 2))  # Sum over height and width
+        union = pred.sum(dim=(1, 2)) + true.sum(dim=(1, 2))  # Sum over height and width
+
+        # Compute Dice score
+        dice = (2.0 * intersection + smooth) / (union + smooth)
+        dice_scores.append(dice.mean().item())  # Average over the batch
+
+    return np.mean(dice_scores)
+
 
 def accuracy(predictions, labels, background_class=-1):
     """

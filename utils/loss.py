@@ -49,44 +49,60 @@ class DiceLoss(nn.Module):
         return loss
     
     
-class DiceBCELoss(nn.Module):
-    """
-    Dice Loss combined with Binary Cross-Entropy Loss.
-    """
-
-    def __init__(self, dice_weight=1, bce_weight=1, smooth=1e-6):
+class DiceCrossEntropyLoss(nn.Module):
+    def __init__(self, dice_weight=0.5, ce_weight=0.5, smooth=1e-6):
         """
-        Initialize DiceBCELoss.
+        Combined Dice and Cross-Entropy Loss for multi-class segmentation.
 
         Args:
-            dice_weight (float): Weight of Dice Loss.
-            bce_weight (float): Weight of Binary Cross-Entropy Loss.
-            smooth (float): Smoothing factor to prevent division by zero.
+            weight (torch.Tensor, optional): Class weights for CrossEntropyLoss.
+            ignore_index (int, optional): Index to ignore in CrossEntropyLoss.
+            dice_weight (float): Weight for the Dice Loss component.
+            ce_weight (float): Weight for the Cross-Entropy Loss component.
+            smooth (float): Smoothing factor for Dice Loss to avoid division by zero.
         """
-        super(DiceBCELoss, self).__init__()
+        super(DiceCrossEntropyLoss, self).__init__()
+        self.ce_loss = nn.CrossEntropyLoss()
         self.dice_weight = dice_weight
-        self.bce_weight = bce_weight
-        self.dice_loss = DiceLoss(smooth)
-        self.bce_loss = nn.BCEWithLogitsLoss()
+        self.ce_weight = ce_weight
+        self.smooth = smooth
 
-    def forward(self, predictions, targets):
+    def forward(self, logits, labels):
         """
-        Compute DiceBCELoss.
+        Compute the combined loss.
 
         Args:
-            predictions (torch.Tensor): Predicted logits of shape (N, C, H, W) or (N, C, H, W, D).
-            targets (torch.Tensor): One-hot encoded ground truth of the same shape as predictions.
+            logits (torch.Tensor): Model predictions (logits) of shape [batch_size, num_classes, height, width].
+            labels (torch.Tensor): Ground truth labels of shape [batch_size, height, width].
 
         Returns:
-            torch.Tensor: DiceBCE loss (scalar).
+            torch.Tensor: Combined loss value.
         """
-        # Compute Dice Loss
-        dice_loss = self.dice_loss(predictions, targets)
+        # Cross-Entropy Loss
+        ce_loss = self.ce_loss(logits, labels)
 
-        # Compute Binary Cross-Entropy Loss
-        bce_loss = self.bce_loss(predictions, targets)
+        # Dice Loss
+        num_classes = logits.size(1)
+        probs = torch.softmax(logits, dim=1)  # Convert logits to probabilities
+        one_hot_labels = torch.nn.functional.one_hot(labels, num_classes).permute(0, 3, 1, 2).float()
+        dice_loss = self._dice_loss(probs, one_hot_labels)
 
-        # Combine Dice Loss and BCE Loss
-        loss = self.dice_weight * dice_loss + self.bce_weight * bce_loss
+        # Combined Loss
+        combined_loss = self.dice_weight * dice_loss + self.ce_weight * ce_loss
+        return combined_loss
 
-        return loss
+    def _dice_loss(self, probs, one_hot_labels):
+        """
+        Compute Dice Loss for multi-class predictions.
+
+        Args:
+            probs (torch.Tensor): Softmax probabilities of shape [batch_size, num_classes, height, width].
+            one_hot_labels (torch.Tensor): One-hot encoded ground truth of shape [batch_size, num_classes, height, width].
+
+        Returns:
+            torch.Tensor: Dice loss value.
+        """
+        intersection = (probs * one_hot_labels).sum(dim=(2, 3))
+        union = probs.sum(dim=(2, 3)) + one_hot_labels.sum(dim=(2, 3))
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice.mean()
