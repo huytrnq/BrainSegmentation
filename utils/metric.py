@@ -10,7 +10,7 @@ import torch
 class MetricsMonitor:
     """Monitor for tracking metrics and implementing early stopping."""
 
-    def __init__(self, metrics=None, patience=5, delta=0.0001, mode="min", save_path="best_model.pth"):
+    def __init__(self, metrics=None, patience=5, delta=0.0001, mode="min", export_path="best_model.pth"):
         """
         Combines metric tracking and early stopping with real-time updates.
 
@@ -19,13 +19,13 @@ class MetricsMonitor:
             patience (int): Patience for early stopping.
             delta (float): Minimum change to qualify as an improvement for early stopping.
             mode (str): 'min' for loss (lower is better) or 'max' for accuracy (higher is better).
-            save_path (str): File path to save the best model.
+            export_path (str): File path to save the best model.
         """
         self.metrics = metrics if metrics else ["loss", "accuracy"]
         self.patience = patience
         self.delta = delta
         self.mode = mode
-        self.save_path = save_path
+        self.export_path = export_path
         self.best_score = None
         self.early_stop = False
         self.counter = 0
@@ -126,8 +126,8 @@ class MetricsMonitor:
 
     def save_checkpoint(self, model):
         """Save the best model to the specified file."""
-        torch.save(model.state_dict(), self.save_path)
-        print(f"\nModel improved and saved to {self.save_path}!")
+        torch.save(model.state_dict(), self.export_path)
+        print(f"\nModel improved and saved to {self.export_path}!")
 
 
 def dice_coefficient(predictions, labels, num_classes=4, smooth=1e-6):

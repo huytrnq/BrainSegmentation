@@ -20,7 +20,7 @@ from utils.metric import MetricsMonitor, dice_coefficient
 
 #################### Hyperparameters ####################
 ROOT_DIR = './Data/'
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 EPOCHS = 300
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 0
@@ -88,25 +88,34 @@ if __name__ == '__main__':
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
+
     for epoch in range(EPOCHS):
         print(f"Epoch {epoch + 1}/{EPOCHS}")
         print("-" * 10)
+
         # Train the model
         train_metric_dict = train(model, train_loader, criteria, optimizer, DEVICE, train_monitor)
-        #################### MLflow ####################
+
+        # Log training metrics to MLflow
         for key, value in train_metric_dict.items():
             mlflow.log_metric(f"train_{key}", value, step=epoch)
-        # Scheduler step
+
+        # Step the scheduler
         scheduler.step()
+
         # Validate the model
         val_metric_dict = validate(model, val_loader, criteria, DEVICE, val_monitor)
-        #################### MLflow ####################
+
+        # Log validation metrics to MLflow
         for key, value in val_metric_dict.items():
             mlflow.log_metric(f"val_{key}", value, step=epoch)
+
         # Early stopping
         if val_monitor.early_stopping_check(val_metric_dict["dice_score"], model):
             break
-        
-    # Log the Model
-    mlflow.pytorch.log_model(model, artifact_path="model")
-    print("Model logged to MLflow.")
+
+    # Log the best model to MLflow after training
+    print(f"Logging the best model with Dice Score of {val_monitor.best_score}")
+    best_model_state = torch.load(val_monitor.export_path)
+    model.load_state_dict(best_model_state)  # Load the best model state
+    mlflow.pytorch.log_model(model, artifact_path="model")  # Log to MLflow
