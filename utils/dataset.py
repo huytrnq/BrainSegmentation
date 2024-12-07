@@ -64,7 +64,7 @@ class BrainMRIDataset(Dataset):
 
 class BrainMRISliceDataset(Dataset):
     """Optimized Dataset for 2D MRI slices with Albumentations transformations."""
-    def __init__(self, base_dir, slice_axis=2, transform=None, num_classes=3, cache=False):
+    def __init__(self, base_dir, slice_axis=2, transform=None, cache=False, ignore_background=False):
         """
         Args:
             base_dir (str): Path to the base directory containing patient subfolders.
@@ -72,11 +72,11 @@ class BrainMRISliceDataset(Dataset):
             transform (callable, optional): Transformations to apply to images and labels.
             num_classes (int): Number of classes in the segmentation mask.
             cache (bool): If True, caches volumes in memory after first load.
+            ignore_background (bool): If True, ignore slices with only background class.
         """
         self.base_dir = base_dir
         self.slice_axis = slice_axis
         self.transform = transform
-        self.num_classes = num_classes
         self.cache = cache
 
         # Collect paths for images and labels
@@ -99,25 +99,31 @@ class BrainMRISliceDataset(Dataset):
         # Compute slice information (metadata only)
         self.slice_info = []  # (volume_idx, slice_idx)
         for volume_idx, (image_path, label_path) in enumerate(self.image_label_pairs):
-            image = nib.load(image_path).shape
-            num_slices = image[self.slice_axis]
-            self.slice_info.extend([(volume_idx, slice_idx) for slice_idx in range(num_slices)])
+                    image = nib.load(image_path).get_fdata()
+                    label = nib.load(label_path).get_fdata().astype(np.int64)
+                    # Determine number of slices along the specified axis
+                    num_slices = image.shape[self.slice_axis]
+                    for slice_idx in range(num_slices):
+                        slice_label = self.extract_slice(label, slice_idx)
+                        if ignore_background and self._is_background_only(slice_label):
+                            continue
+                        self.slice_info.append((volume_idx, slice_idx))
 
         # Initialize cache if enabled
         self.volume_cache = {} if cache else None
+        
+    def _is_background_only(self, label_slice):
+        """
+        Check if a label slice contains only the background class.
+        Args:
+            label_slice (np.ndarray): A 2D slice of the label volume.
+        Returns:
+            bool: True if the slice is background-only, False otherwise.
+        """
+        return np.all(label_slice == 0)  # Assume background is class 0
 
     def __len__(self):
         return len(self.slice_info)
-
-    def mask_to_onehot(self, mask):
-        """
-        Efficiently convert a segmentation mask to one-hot encoded format.
-        """
-        onehot = torch.nn.functional.one_hot(mask.clone().detach().to(torch.long), num_classes=self.num_classes + 1)
-        onehot = onehot.permute(2, 3, 0, 1).float()
-        # Exclude the background class
-        onehot = onehot[:, 1:, ...]
-        return onehot
 
     def load_volume(self, path):
         """
@@ -161,7 +167,6 @@ class BrainMRISliceDataset(Dataset):
             label_slice = augmented['mask']
 
         # Convert to one-hot encoding for the label
-        # label_slice = self.mask_to_onehot(label_slice).squeeze(0)
         label_slice = label_slice.permute(2, 0, 1).float()
 
         # Add a channel dimension to the image

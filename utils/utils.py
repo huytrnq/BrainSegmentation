@@ -1,6 +1,7 @@
 """Utility functions for training and testing the model."""
 
 import torch
+import numpy as np
 from utils.metric import accuracy, dice_coefficient
 
 
@@ -43,7 +44,7 @@ def train(model, train_loader, criterion, optimizer, device, monitor):
         # Update monitor with loss and accuracy
         monitor.update("loss", loss.item(), count=len(images))
         # monitor.update("accuracy", batch_accuracy, count=len(images))
-        monitor.update("dice_score", dice_score.mean().item(), count=len(images))
+        monitor.update("dice_score", np.mean(dice_score), count=len(images))
 
         # Print iteration metrics
         monitor.print_iteration(batch_idx + 1, len(train_loader), phase="Train")
@@ -88,7 +89,7 @@ def validate(model, valid_loader, criterion, device, monitor):
             # Update monitor with loss and accuracy
             monitor.update("loss", loss.item(), count=len(images))
             # monitor.update("accuracy", batch_accuracy, count=len(images))
-            monitor.update("dice_score", dice_score.mean().item(), count=len(images))
+            monitor.update("dice_score", np.mean(dice_score), count=len(images))
 
             # Print iteration metrics
             monitor.print_iteration(batch_idx + 1, len(valid_loader), phase="Validation")

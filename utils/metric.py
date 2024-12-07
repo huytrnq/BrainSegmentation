@@ -162,7 +162,7 @@ def dice_coefficient(predictions, labels, num_classes=4, smooth=1e-6):
         dice = (2.0 * intersection + smooth) / (union + smooth)
         dice_scores.append(dice.mean().item())  # Average over the batch
 
-    return np.mean(dice_scores)
+    return dice_scores
 
 
 def accuracy(predictions, labels, background_class=-1):
