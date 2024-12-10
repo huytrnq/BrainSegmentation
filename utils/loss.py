@@ -2,54 +2,48 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+
 
 class DiceLoss(nn.Module):
     """
     Dice Loss for segmentation tasks.
     """
-
+    __name__ = 'dice_loss'
     def __init__(self, smooth=1e-6):
-        """
-        Initialize DiceLoss.
-
-        Args:
-            smooth (float): Smoothing factor to prevent division by zero.
-        """
         super(DiceLoss, self).__init__()
         self.smooth = smooth
 
-    def forward(self, predictions, targets):
+    def forward(self, logits, targets):
         """
-        Compute Dice Loss.
-
+        Computes Dice Loss.
         Args:
-            predictions (torch.Tensor): Predicted probabilities of shape (N, C, H, W) or (N, C, H, W, D).
-            targets (torch.Tensor): One-hot encoded ground truth of the same shape as predictions.
-
+            logits (torch.Tensor): Raw predictions (shape: [B, C, H, W]).
+            targets (torch.Tensor): Ground truth (shape: [B, H, W]).
         Returns:
-            torch.Tensor: Dice loss (scalar).
+            torch.Tensor: Dice Loss value.
         """
-        # Convert predictions to probabilities using softmax
-        predictions = torch.softmax(predictions, dim=1)
-        
-        # Flatten the tensors to compute Dice score
-        predictions = predictions.contiguous().view(predictions.shape[0], predictions.shape[1], -1)
-        targets = targets.contiguous().view(targets.shape[0], targets.shape[1], -1)
+        # Ensure logits and targets are compatible
+        if len(targets.shape) == 3:  # Not one-hot encoded
+            num_classes = logits.size(1)
+            targets = F.one_hot(targets, num_classes=num_classes).permute(0, 3, 1, 2).float()
 
-        # Calculate intersection and union
-        intersection = torch.sum(predictions * targets, dim=2)
-        union = torch.sum(predictions, dim=2) + torch.sum(targets, dim=2)
+        # Convert logits to probabilities
+        probs = torch.softmax(logits, dim=1)
+
+        # Compute intersection and union
+        intersection = (probs * targets).sum(dim=(2, 3))  # Sum over spatial dimensions
+        union = probs.sum(dim=(2, 3)) + targets.sum(dim=(2, 3))
 
         # Compute Dice coefficient
         dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
-
-        # Dice loss is 1 - Dice coefficient
-        loss = 1 - dice.mean()
-
-        return loss
+        
+        # Return Dice loss
+        return 1 - dice.mean()
     
     
 class DiceCrossEntropyLoss(nn.Module):
+    __name__ = 'dice_cross_entropy_loss'
     def __init__(self, dice_weight=0.5, ce_weight=0.5, smooth=1e-6):
         """
         Combined Dice and Cross-Entropy Loss for multi-class segmentation.
@@ -106,3 +100,58 @@ class DiceCrossEntropyLoss(nn.Module):
         union = probs.sum(dim=(2, 3)) + one_hot_labels.sum(dim=(2, 3))
         dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
         return 1 - dice.mean()
+
+
+class DiceFocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2, smooth=1e-6, lambda_dice=0.5, lambda_focal=0.5):
+        super(DiceFocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.smooth = smooth
+        self.lambda_dice = lambda_dice
+        self.lambda_focal = lambda_focal
+
+    def dice_loss(self, logits, targets):
+        """
+        Computes Dice Loss.
+        Args:
+            logits (torch.Tensor): Raw predictions (shape: [B, C, H, W]).
+            targets (torch.Tensor): Ground truth (shape: [B, H, W] with class indices).
+        Returns:
+            torch.Tensor: Dice Loss value.
+        """
+        probs = torch.softmax(logits, dim=1)  # [B, C, H, W]
+        targets_one_hot = F.one_hot(targets, num_classes=logits.size(1)).permute(0, 3, 1, 2).float()  # [B, C, H, W]
+
+        intersection = (probs * targets_one_hot).sum(dim=(2, 3))  # Sum over spatial dimensions
+        union = probs.sum(dim=(2, 3)) + targets_one_hot.sum(dim=(2, 3))
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
+        return 1 - dice.mean()
+
+    def focal_loss(self, logits, targets):
+        """
+        Computes Focal Loss.
+        Args:
+            logits (torch.Tensor): Raw predictions (shape: [B, C, H, W]).
+            targets (torch.Tensor): Ground truth (shape: [B, H, W] with class indices).
+        Returns:
+            torch.Tensor: Focal Loss value.
+        """
+        probs = torch.softmax(logits, dim=1)  # [B, C, H, W]
+        ce_loss = F.cross_entropy(logits, targets, reduction="none")  # [B, H, W]
+        pt = torch.exp(-ce_loss)  # Probability of the true class
+        focal_loss = self.alpha * (1 - pt) ** self.gamma * ce_loss
+        return focal_loss.mean()
+
+    def forward(self, logits, targets):
+        """
+        Combines Dice Loss and Focal Loss.
+        Args:
+            logits (torch.Tensor): Raw predictions (shape: [B, C, H, W]).
+            targets (torch.Tensor): Ground truth (shape: [B, H, W] with class indices).
+        Returns:
+            torch.Tensor: Combined loss value.
+        """
+        dice = self.dice_loss(logits, targets)
+        focal = self.focal_loss(logits, targets)
+        return self.lambda_dice * dice + self.lambda_focal * focal

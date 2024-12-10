@@ -13,7 +13,7 @@ import segmentation_models_pytorch as smp
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import matplotlib.pyplot as plt
-from utils.loss import DiceLoss, DiceCrossEntropyLoss
+from utils.loss import DiceLoss, DiceCrossEntropyLoss, DiceFocalLoss
 from utils.dataset import BrainMRISliceDataset
 from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient
@@ -76,7 +76,8 @@ if __name__ == '__main__':
     model = model.to(DEVICE)
     
     #################### Loss, Optimizer, Scheduler ####################
-    criteria = DiceCrossEntropyLoss()
+    # criteria = DiceCrossEntropyLoss(dice_weight=0.4, ce_weight=0.6)
+    criteria = DiceFocalLoss(lambda_focal=0.6, lambda_dice=0.4)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-5)
     
@@ -88,6 +89,9 @@ if __name__ == '__main__':
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
+    mlflow.log_param("optimizer", optimizer.__class__.__name__)
+    mlflow.log_param("scheduler", scheduler.__class__.__name__)
+    mlflow.log_param("criterion", criteria.__class__.__name__)    
 
     for epoch in range(EPOCHS):
         print(f"Epoch {epoch + 1}/{EPOCHS}")
