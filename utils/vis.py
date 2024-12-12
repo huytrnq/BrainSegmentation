@@ -38,3 +38,26 @@ def plot_mri(image, label, slice_idx=100):
 
     plt.tight_layout()
     plt.show()
+    
+def plot_images(images, titles, cols=1, figsize=(10, 5), wspace=0.1, hspace=0.1):
+    """
+    Visualize a list of images with their corresponding titles.
+    
+    Args:
+        images (list): List of images to visualize.
+        titles (list): List of titles for each image.
+        cols (int): Number of columns in the grid.
+        figsize (tuple): Figure size (width, height).
+        wspace (float): Width space between subplots.
+        hspace (float): Height space between subplots.
+    """
+    rows = len(images) // cols + (len(images) % cols > 0)
+    plt.figure(figsize=figsize)
+    for i, (image, title) in enumerate(zip(images, titles)):
+        plt.subplot(rows, cols, i + 1)
+        plt.imshow(image, cmap='gray')
+        plt.title(title, fontsize=10)
+        plt.axis('off')
+    # Adjust spacing between subplots
+    plt.subplots_adjust(wspace=wspace, hspace=hspace)
+    plt.show()
