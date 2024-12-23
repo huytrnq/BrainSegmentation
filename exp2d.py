@@ -19,20 +19,14 @@ from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient
 
 #################### Hyperparameters ####################
-ROOT_DIR = './Data/'
+ROOT_DIR = '../Data/'
 BATCH_SIZE = 16
 EPOCHS = 300
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 0
 LR = 0.01
 
-if __name__ == '__main__':
-    #################### MLflow ####################
-    mlflow.log_param("batch_size", BATCH_SIZE)
-    mlflow.log_param("epochs", EPOCHS)
-    mlflow.log_param("learning_rate", LR)
-    mlflow.log_param("model", "EfficientNet-UNet")
-    
+if __name__ == '__main__':    
     print(f"Using device: {DEVICE}")
     #################### DataLoaders #################### 
 
@@ -89,6 +83,10 @@ if __name__ == '__main__':
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
+    #################### MLflow ####################
+    mlflow.log_param("batch_size", BATCH_SIZE)
+    mlflow.log_param("epochs", EPOCHS)
+    mlflow.log_param("learning_rate", LR)
     mlflow.log_param("model", model.__class__.__name__)
     mlflow.log_param("optimizer", optimizer.__class__.__name__)
     mlflow.log_param("scheduler", scheduler.__class__.__name__)
