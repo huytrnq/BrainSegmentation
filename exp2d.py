@@ -19,7 +19,7 @@ from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient
 
 #################### Hyperparameters ####################
-ROOT_DIR = '../Data/'
+ROOT_DIR = './Data/'
 BATCH_SIZE = 16
 EPOCHS = 300
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -89,6 +89,7 @@ if __name__ == '__main__':
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
+    mlflow.log_param("model", model.__class__.__name__)
     mlflow.log_param("optimizer", optimizer.__class__.__name__)
     mlflow.log_param("scheduler", scheduler.__class__.__name__)
     mlflow.log_param("criterion", criteria.__class__.__name__)    
