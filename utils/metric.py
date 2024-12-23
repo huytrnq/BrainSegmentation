@@ -141,6 +141,11 @@ def dice_coefficient(predictions, labels, num_classes=4, smooth=1e-6):
     Returns:
         list: Dice score for each class.
     """
+    if isinstance(predictions, np.ndarray):
+        predictions = torch.from_numpy(predictions)
+    if isinstance(labels, np.ndarray):
+        labels = torch.from_numpy(labels)
+        
     # Convert logits to probabilities
     predictions = torch.softmax(predictions.float(), dim=1)  # Shape [batch_size, num_classes, height, width]
 
