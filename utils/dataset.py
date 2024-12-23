@@ -78,6 +78,7 @@ class BrainMRISliceDataset(Dataset):
         self.slice_axis = slice_axis
         self.transform = transform
         self.cache = cache
+        self.metadata = {} # Store metadata for each volume
 
         # Collect paths for images and labels
         self.image_label_pairs = []
@@ -99,19 +100,34 @@ class BrainMRISliceDataset(Dataset):
         # Compute slice information (metadata only)
         self.slice_info = []  # (volume_idx, slice_idx)
         for volume_idx, (image_path, label_path) in enumerate(self.image_label_pairs):
-                    image = nib.load(image_path).get_fdata()
-                    label = nib.load(label_path).get_fdata().astype(np.int64)
-                    # Determine number of slices along the specified axis
-                    num_slices = image.shape[self.slice_axis]
-                    for slice_idx in range(num_slices):
-                        slice_label = self.extract_slice(label, slice_idx)
-                        if ignore_background and self._is_background_only(slice_label):
-                            continue
-                        self.slice_info.append((volume_idx, slice_idx))
+            image = nib.load(image_path)
+            label = nib.load(label_path)
+            
+            ## Extract metadata
+            header = image.header
+            affine = image.affine
+            image_data = image.get_fdata()
+            label_data = label.get_fdata().astype(np.int64)
+            
+            self.metadata[volume_idx] = {
+                "shape": image_data.shape,
+                "affine": affine,
+                "header": header,
+                "image_path": image_path,
+            }
+            
+            # Determine number of slices along the specified axis
+            num_slices = image_data.shape[self.slice_axis]
+            for slice_idx in range(num_slices):
+                slice_label = self.extract_slice(label_data, slice_idx)
+                if ignore_background and self._is_background_only(slice_label):
+                    continue
+                self.slice_info.append((volume_idx, slice_idx))
 
         # Initialize cache if enabled
         self.volume_cache = {} if cache else None
         
+
     def _is_background_only(self, label_slice):
         """
         Check if a label slice contains only the background class.
@@ -175,4 +191,4 @@ class BrainMRISliceDataset(Dataset):
         else:  # If it's already a tensor
             image_slice = image_slice.clone().detach().to(torch.float32)
 
-        return image_slice, label_slice
+        return image_slice, label_slice, volume_idx, slice_idx
