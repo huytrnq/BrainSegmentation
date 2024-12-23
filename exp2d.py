@@ -19,7 +19,7 @@ from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient
 
 #################### Hyperparameters ####################
-ROOT_DIR = './Data/'
+ROOT_DIR = '../Data/'
 BATCH_SIZE = 16
 EPOCHS = 300
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -67,8 +67,8 @@ if __name__ == '__main__':
 
     #################### Model ####################
     
-    model = smp.Unet(
-        encoder_name="efficientnet-b7",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+    model = smp.Segformer(
+        encoder_name="efficientnet-b6",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
         encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
         in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
         classes=4,                      # model output channels (number of classes in your dataset)
@@ -76,8 +76,8 @@ if __name__ == '__main__':
     model = model.to(DEVICE)
     
     #################### Loss, Optimizer, Scheduler ####################
-    # criteria = DiceCrossEntropyLoss(dice_weight=0.4, ce_weight=0.6)
-    criteria = DiceFocalLoss(lambda_focal=0.6, lambda_dice=0.4)
+    criteria = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5)
+    # criteria = DiceFocalLoss(lambda_focal=0.6, lambda_dice=0.4)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-5)
     
