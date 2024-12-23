@@ -141,3 +141,4 @@ __pycache__/
 *.pyc
 Data/
 *.pth
+results/

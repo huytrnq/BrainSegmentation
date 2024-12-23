@@ -202,3 +202,36 @@ def accuracy(predictions, labels, background_class=-1):
 
     accuracy = correct / total if total > 0 else 0.0
     return accuracy
+
+
+def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
+    """
+    Compute the Dice Score for multi-class 3D volumes using PyTorch.
+
+    Args:
+        prediction (torch.Tensor): Predicted segmentation (shape: [Z, Y, X]).
+        ground_truth (torch.Tensor): Ground truth segmentation (shape: [Z, Y, X]).
+        num_classes (int): Number of classes.
+        smooth (float): Small smoothing factor to avoid division by zero.
+
+    Returns:
+        dict: Dice Score for each class.
+    """
+    if isinstance(prediction, np.ndarray):
+        prediction = torch.from_numpy(prediction)
+    if isinstance(ground_truth, np.ndarray):
+        ground_truth = torch.from_numpy(ground_truth)
+        
+    dice_scores = {}
+    for class_id in range(num_classes):
+        # Create binary masks for the current class
+        pred_class = (prediction == class_id).float()
+        gt_class = (ground_truth == class_id).float()
+
+        # Compute Dice Score
+        intersection = torch.sum(pred_class * gt_class)
+        union = torch.sum(pred_class) + torch.sum(gt_class)
+        dice = (2.0 * intersection + smooth) / (union + smooth)
+        dice_scores[class_id] = dice.item()
+
+    return dice_scores
