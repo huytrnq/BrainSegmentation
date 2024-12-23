@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import dagshub
 import mlflow
 dagshub.init(repo_owner='huytrnq', repo_name='BrainSegmentation', mlflow=True)
@@ -16,7 +17,7 @@ import matplotlib.pyplot as plt
 from utils.loss import DiceLoss, DiceCrossEntropyLoss, DiceFocalLoss
 from utils.dataset import BrainMRISliceDataset
 from utils.utils import train, validate
-from utils.metric import MetricsMonitor, dice_coefficient
+from utils.metric import MetricsMonitor, dice_coefficient, dice_score_3d
 
 #################### Hyperparameters ####################
 ROOT_DIR = './Data/'
@@ -39,8 +40,8 @@ if __name__ == '__main__':
         # A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.3),  
         A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
         A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
-        A.Normalize(normalization="min_max", p=1.0),
-        # A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),  # Normalize the image
+        # A.Normalize(normalization="min_max", p=1.0),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),  # Normalize the image
         ToTensorV2()  # Convert to PyTorch tensors
     ], additional_targets={'mask': 'mask'})  # Specify the target name for the label
 
@@ -48,8 +49,8 @@ if __name__ == '__main__':
         # A.Resize(256, 256),
         A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
         A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
-        A.Normalize(normalization="min_max", p=1.0),
-        # A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+        # A.Normalize(normalization="min_max", p=1.0),
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
     ], additional_targets={'mask': 'mask'})
 
@@ -122,3 +123,36 @@ if __name__ == '__main__':
     best_model_state = torch.load(val_monitor.export_path)
     model.load_state_dict(best_model_state)  # Load the best model state
     mlflow.pytorch.log_model(model, artifact_path="model")  # Log to MLflow
+    
+    #################### 2D Evaluation ####################
+    predictions = []
+    labels = []
+    volume_idxs = []
+    slice_idxs = []
+    meta_data = val_dataset.metadata
+
+    model.eval()
+    with torch.no_grad():
+        for batch_idx, (images, masks, volume_idx, slice_idx) in enumerate(val_loader):
+            images = images.to(DEVICE)
+            masks = masks.to(DEVICE)
+            outputs = model(images)
+            predictions.append(outputs)
+            labels.append(masks)
+            volume_idxs.extend(volume_idx.numpy().tolist())
+            slice_idxs.extend(slice_idx.numpy().tolist())
+            
+    predictions = torch.cat(predictions, dim=0).detach().cpu()
+    labels = torch.cat(labels, dim=0).squeeze(1).long().detach().cpu()
+    dice_scores = dice_coefficient(predictions, labels, num_classes=4)
+    print(dice_scores)
+    print(f"Dice Score: {np.mean(dice_scores)}")
+    
+    #################### 3D Evaluation ####################
+    N_TEST = 5
+    metadata = val_dataset.metadata
+    # Split the predictions and labels into volumes
+    predictions = np.array(predictions).reshape(N_TEST, -1, 256, 256)
+    labels = np.array(labels).reshape(N_TEST, -1, 256, 256)
+    dices = dice_score_3d(predictions, labels, num_classes=4)
+    print(dices)
