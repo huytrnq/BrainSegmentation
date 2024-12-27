@@ -28,37 +28,37 @@ class BrainMRIDataset(Dataset):
             if os.path.isdir(patient_path):
                 # Initialize variables for raw and segmentation paths
                 raw_image = None
-                label_image = None
+                mask_image = None
                 # Iterate over files in the patient folder
                 for file in os.listdir(patient_path):
                     if file.startswith('.'):  # Skip hidden files like .DS_Store
                         continue
                     if 'seg' in file.lower():  # Identify segmentation files
-                        label_image = os.path.join(patient_path, file)
+                        mask_image = os.path.join(patient_path, file)
                     else:  # Assume remaining files are raw images
                         raw_image = os.path.join(patient_path, file)
-                # Ensure both raw and label paths are found
-                if raw_image and label_image:
-                    self.data.append((raw_image, label_image))
+                # Ensure both raw and mask paths are found
+                if raw_image and mask_image:
+                    self.data.append((raw_image, mask_image))
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        raw_path, label_path = self.data[idx]
+        raw_path, mask_path = self.data[idx]
 
         # Load .nii.gz files using nibabel
         image = nib.load(raw_path).get_fdata().astype(np.float32)
-        label = nib.load(label_path).get_fdata().astype(np.int64)
+        mask = nib.load(mask_path).get_fdata().astype(np.int64)
 
         # Apply transformations if any
         if self.transform:
             image = self.transform(image)
         # Convert to PyTorch tensors
-        image = torch.from_numpy(image)
-        label = torch.from_numpy(label)
+        image = torch.from_numpy(image).permute(3, 0, 1, 2)
+        mask = torch.from_numpy(mask).permute(3, 0, 1, 2)
 
-        return image, label
+        return {'image': image, 'mask': mask}
 
 
 
