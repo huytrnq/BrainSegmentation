@@ -44,30 +44,35 @@ class DiceLoss(nn.Module):
     
 class DiceCrossEntropyLoss(nn.Module):
     __name__ = 'dice_cross_entropy_loss'
-    def __init__(self, dice_weight=0.5, ce_weight=0.5, smooth=1e-6):
+
+    def __init__(self, dice_weight=0.5, ce_weight=0.5, smooth=1e-6, is_3d=False):
         """
         Combined Dice and Cross-Entropy Loss for multi-class segmentation.
 
         Args:
-            weight (torch.Tensor, optional): Class weights for CrossEntropyLoss.
-            ignore_index (int, optional): Index to ignore in CrossEntropyLoss.
             dice_weight (float): Weight for the Dice Loss component.
             ce_weight (float): Weight for the Cross-Entropy Loss component.
             smooth (float): Smoothing factor for Dice Loss to avoid division by zero.
+            is_3d (bool): Whether to use 3D segmentation (default: False for 2D segmentation).
         """
         super(DiceCrossEntropyLoss, self).__init__()
         self.ce_loss = nn.CrossEntropyLoss()
         self.dice_weight = dice_weight
         self.ce_weight = ce_weight
         self.smooth = smooth
+        self.is_3d = is_3d  # Flag to toggle between 2D and 3D modes
 
     def forward(self, logits, labels):
         """
         Compute the combined loss.
 
         Args:
-            logits (torch.Tensor): Model predictions (logits) of shape [batch_size, num_classes, height, width].
-            labels (torch.Tensor): Ground truth labels of shape [batch_size, height, width].
+            logits (torch.Tensor): Model predictions.
+                - Shape for 2D: [batch_size, num_classes, height, width].
+                - Shape for 3D: [batch_size, num_classes, depth, height, width].
+            labels (torch.Tensor): Ground truth labels.
+                - Shape for 2D: [batch_size, height, width].
+                - Shape for 3D: [batch_size, depth, height, width].
 
         Returns:
             torch.Tensor: Combined loss value.
@@ -78,28 +83,50 @@ class DiceCrossEntropyLoss(nn.Module):
         # Dice Loss
         num_classes = logits.size(1)
         probs = torch.softmax(logits, dim=1)  # Convert logits to probabilities
-        one_hot_labels = torch.nn.functional.one_hot(labels, num_classes).permute(0, 3, 1, 2).float()
-        dice_loss = self._dice_loss(probs, one_hot_labels)
+        one_hot_labels = F.one_hot(labels, num_classes).permute(0, *range(2, logits.dim()), 1).float()
+
+        if self.is_3d:
+            dice_loss = self._dice_loss_3d(probs, one_hot_labels)
+        else:
+            dice_loss = self._dice_loss_2d(probs, one_hot_labels)
 
         # Combined Loss
         combined_loss = self.dice_weight * dice_loss + self.ce_weight * ce_loss
         return combined_loss
 
-    def _dice_loss(self, probs, one_hot_labels):
+    def _dice_loss_2d(self, probs, one_hot_labels):
         """
-        Compute Dice Loss for multi-class predictions.
+        Compute Dice Loss for 2D segmentation.
 
         Args:
-            probs (torch.Tensor): Softmax probabilities of shape [batch_size, num_classes, height, width].
-            one_hot_labels (torch.Tensor): One-hot encoded ground truth of shape [batch_size, num_classes, height, width].
+            probs (torch.Tensor): Predicted probabilities, shape [batch_size, num_classes, height, width].
+            one_hot_labels (torch.Tensor): One-hot encoded ground truth, shape [batch_size, num_classes, height, width].
 
         Returns:
             torch.Tensor: Dice loss value.
         """
-        intersection = (probs * one_hot_labels).sum(dim=(2, 3))
-        union = probs.sum(dim=(2, 3)) + one_hot_labels.sum(dim=(2, 3))
-        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
-        return 1 - dice.mean()
+        intersection = torch.sum(probs * one_hot_labels, dim=(2, 3))  # Sum over height and width
+        union = torch.sum(probs, dim=(2, 3)) + torch.sum(one_hot_labels, dim=(2, 3))  # Sum over height and width
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)  # Dice coefficient for each class
+        dice_loss = 1 - dice.mean()  # Average over batch and classes
+        return dice_loss
+
+    def _dice_loss_3d(self, probs, one_hot_labels):
+        """
+        Compute Dice Loss for 3D segmentation.
+
+        Args:
+            probs (torch.Tensor): Predicted probabilities, shape [batch_size, num_classes, depth, height, width].
+            one_hot_labels (torch.Tensor): One-hot encoded ground truth, shape [batch_size, num_classes, depth, height, width].
+
+        Returns:
+            torch.Tensor: Dice loss value.
+        """
+        intersection = torch.sum(probs * one_hot_labels, dim=(2, 3, 4))  # Sum over depth, height, and width
+        union = torch.sum(probs, dim=(2, 3, 4)) + torch.sum(one_hot_labels, dim=(2, 3, 4))  # Sum over depth, height, and width
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)  # Dice coefficient for each class
+        dice_loss = 1 - dice.mean()  # Average over batch and classes
+        return dice_loss
 
 
 class DiceFocalLoss(nn.Module):
