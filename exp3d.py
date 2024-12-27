@@ -13,7 +13,7 @@ from models.Unet import UNet3D
 from utils.loss import DiceCrossEntropyLoss
 
 if __name__ == '__main__':
-    ROOT_DIR = '../Data/'
+    ROOT_DIR = './Data/'
     BATCH_SIZE = 1
     EPOCHS = 50
     NUM_CLASSES = 4
