@@ -20,12 +20,12 @@ from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient, dice_score_3d
 
 #################### Hyperparameters ####################
-ROOT_DIR = './Data/'
+ROOT_DIR = '../Data/'
 BATCH_SIZE = 16
 EPOCHS = 300
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 0
-LR = 0.01
+LR = 0.001
 
 if __name__ == '__main__':    
     print(f"Using device: {DEVICE}")
@@ -37,7 +37,7 @@ if __name__ == '__main__':
         A.VerticalFlip(p=0.5),  # Flip vertically
         # A.RandomRotate90(p=0.5),  # Randomly rotate 90 degrees
         A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=20, p=0.5),
-        # A.ElasticTransform(alpha=1, sigma=50, alpha_affine=50, p=0.3),  
+        A.ElasticTransform(alpha=1, sigma=50, p=0.3),  
         A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
         A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
         # A.Normalize(normalization="min_max", p=1.0),
