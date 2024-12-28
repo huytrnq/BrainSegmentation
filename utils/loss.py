@@ -82,12 +82,13 @@ class DiceCrossEntropyLoss(nn.Module):
 
         # Dice Loss
         num_classes = logits.size(1)
-        probs = torch.softmax(logits, dim=1)  # Convert logits to probabilities
-        one_hot_labels = F.one_hot(labels, num_classes).permute(0, *range(2, logits.dim()), 1).float()
-
+        probs = torch.softmax(logits, dim=1)  # Convert logits to probabilities        
+        
         if self.is_3d:
+            one_hot_labels = F.one_hot(labels, num_classes).permute(0, 4, 1, 2, 3).float()
             dice_loss = self._dice_loss_3d(probs, one_hot_labels)
         else:
+            one_hot_labels = F.one_hot(labels, num_classes).permute(0, 3, 1, 2).float()
             dice_loss = self._dice_loss_2d(probs, one_hot_labels)
 
         # Combined Loss
