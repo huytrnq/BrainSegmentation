@@ -20,7 +20,7 @@ from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient, dice_score_3d
 
 #################### Hyperparameters ####################
-ROOT_DIR = '../Data/'
+ROOT_DIR = './Data/'
 BATCH_SIZE = 16
 EPOCHS = 300
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -31,24 +31,38 @@ if __name__ == '__main__':
     print(f"Using device: {DEVICE}")
     #################### DataLoaders #################### 
 
+    # Augmentation pipeline
     train_transform = A.Compose([
-        # A.Resize(256, 256),  # Resize both image and mask
-        A.HorizontalFlip(p=0.5),  # Flip horizontally
-        A.VerticalFlip(p=0.5),  # Flip vertically
-        # A.RandomRotate90(p=0.5),  # Randomly rotate 90 degrees
-        A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=20, p=0.5),
-        A.ElasticTransform(alpha=1, sigma=50, p=0.3),  
-        A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
-        A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
-        # A.Normalize(normalization="min_max", p=1.0),
-        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),  # Normalize the image
-        ToTensorV2()  # Convert to PyTorch tensors
-    ], additional_targets={'mask': 'mask'})  # Specify the target name for the label
+        # Spatial Transformations
+        A.OneOf([
+            A.Affine(scale=(0.8, 1.2), translate_percent=(0.1, 0.2), rotate=(-30, 30), shear=(-15, 15), p=1.0),  # Scaling, Rotation, Shearing
+            A.ElasticTransform(alpha=1.0, sigma=50.0, p=1.0),  # Elastic deformation
+        ], p=0.5),  # 50% chance to apply one of the spatial transforms
+
+        # Intensity Perturbations
+        A.OneOf([
+            A.GaussianBlur(blur_limit=(3, 5), p=1.0),  # Gaussian Blur
+            A.GaussNoise(var_limit=(10.0, 50.0), p=1.0),  # Gaussian Noise
+            A.MultiplicativeNoise(multiplier=(0.9, 1.1), elementwise=True, p=1.0),  # Brightness Multiplicative Transform
+            A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=1.0),  # Brightness and Contrast
+            A.RandomGamma(gamma_limit=(80, 120), p=1.0),  # Gamma Transform
+        ], p=0.5),  # 50% chance to apply one of the intensity perturbations
+
+        # Other Transformations
+        A.OneOf([
+            A.HorizontalFlip(p=1.0),  # Mirroring
+            A.VerticalFlip(p=1.0),  # Mirroring
+        ], p=0.5),
+
+        # Normalize and convert to tensors
+        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),  # Normalize to ImageNet stats
+        ToTensorV2()
+    ], additional_targets={'mask': 'mask'})  # Include mask augmentation
 
     test_transform = A.Compose([
         # A.Resize(256, 256),
-        A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
-        A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
+        # A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
+        # A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
         # A.Normalize(normalization="min_max", p=1.0),
         A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
         ToTensorV2()
@@ -63,7 +77,7 @@ if __name__ == '__main__':
     #################### Model ####################
     
     model = smp.Segformer(
-        encoder_name="efficientnet-b6",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+        encoder_name="efficientnet-b4",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
         encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
         in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
         classes=4,                      # model output channels (number of classes in your dataset)
@@ -71,8 +85,7 @@ if __name__ == '__main__':
     model = model.to(DEVICE)
     
     #################### Loss, Optimizer, Scheduler ####################
-    criteria = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5)
-    # criteria = DiceFocalLoss(lambda_focal=0.6, lambda_dice=0.4)
+    criterion = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-5)
     
@@ -80,7 +93,7 @@ if __name__ == '__main__':
     # Monitors
     train_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     val_monitor = MetricsMonitor(
-        metrics=["loss", "dice_score"], patience=5, mode="max"
+        metrics=["loss", "dice_score"], patience=20, mode="max"
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
@@ -91,14 +104,14 @@ if __name__ == '__main__':
     mlflow.log_param("model", model.__class__.__name__)
     mlflow.log_param("optimizer", optimizer.__class__.__name__)
     mlflow.log_param("scheduler", scheduler.__class__.__name__)
-    mlflow.log_param("criterion", criteria.__class__.__name__)    
+    mlflow.log_param("criterion", criterion.__class__.__name__)    
 
     for epoch in range(EPOCHS):
         print(f"Epoch {epoch + 1}/{EPOCHS}")
         print("-" * 10)
 
         # Train the model
-        train_metric_dict = train(model, train_loader, criteria, optimizer, DEVICE, train_monitor)
+        train_metric_dict = train(model, train_loader, criterion, optimizer, DEVICE, train_monitor)
 
         # Log training metrics to MLflow
         for key, value in train_metric_dict.items():
@@ -108,7 +121,7 @@ if __name__ == '__main__':
         scheduler.step()
 
         # Validate the model
-        val_metric_dict = validate(model, val_loader, criteria, DEVICE, val_monitor)
+        val_metric_dict = validate(model, val_loader, criterion, DEVICE, val_monitor)
 
         # Log validation metrics to MLflow
         for key, value in val_metric_dict.items():
@@ -152,7 +165,7 @@ if __name__ == '__main__':
     N_TEST = 5
     metadata = val_dataset.metadata
     # Split the predictions and labels into volumes
-    predictions = np.array(predictions).reshape(N_TEST, -1, 256, 256)
-    labels = np.array(labels).reshape(N_TEST, -1, 256, 256)
+    predictions = np.array(predictions).reshape(N_TEST, -1, 128, 256)
+    labels = np.array(labels).reshape(N_TEST, -1, 128, 256)
     dices = dice_score_3d(predictions, labels, num_classes=4)
     print(dices)

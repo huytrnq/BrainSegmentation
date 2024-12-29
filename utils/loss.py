@@ -77,6 +77,9 @@ class DiceCrossEntropyLoss(nn.Module):
         Returns:
             torch.Tensor: Combined loss value.
         """
+        # Squeeze any singleton dimensions in labels
+        labels = labels.squeeze(1) if labels.dim() > logits.dim() - 1 else labels
+        
         # Cross-Entropy Loss
         ce_loss = self.ce_loss(logits, labels)
 

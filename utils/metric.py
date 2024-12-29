@@ -214,8 +214,8 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
     Compute the Dice Score for multi-class 3D volumes using PyTorch.
 
     Args:
-        prediction (torch.Tensor): Predicted segmentation (shape: [Z, Y, X]).
-        ground_truth (torch.Tensor): Ground truth segmentation (shape: [Z, Y, X]).
+        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X]).
+        ground_truth (torch.Tensor): Ground truth segmentation (shape: [batch_size, Z, Y, X]).
         num_classes (int): Number of classes.
         smooth (float): Small smoothing factor to avoid division by zero.
 
@@ -227,16 +227,27 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
     if isinstance(ground_truth, np.ndarray):
         ground_truth = torch.from_numpy(ground_truth)
         
-    dice_scores = {}
+    # If prediction is a probability map, convert to class predictions
+    if prediction.size(1) != num_classes:
+        prediction = torch.argmax(prediction, dim=1)
+        
+    batch_size = prediction.size(0)
+    dice_scores = {class_id: 0.0 for class_id in range(num_classes)}
+    
     for class_id in range(num_classes):
         # Create binary masks for the current class
-        pred_class = (prediction == class_id).float()
-        gt_class = (ground_truth == class_id).float()
+        batch_dice = []
+        for i in range(batch_size):
+            pred_class = (prediction[i] == class_id).float()
+            gt_class = (ground_truth[i] == class_id).float()
 
-        # Compute Dice Score
-        intersection = torch.sum(pred_class * gt_class)
-        union = torch.sum(pred_class) + torch.sum(gt_class)
-        dice = (2.0 * intersection + smooth) / (union + smooth)
-        dice_scores[class_id] = dice.item()
+            # Compute Dice Score for the current volume in the batch
+            intersection = torch.sum(pred_class * gt_class)
+            union = torch.sum(pred_class) + torch.sum(gt_class)
+            dice = (2.0 * intersection + smooth) / (union + smooth)
+            batch_dice.append(dice.item())
+        
+        # Average Dice Score across the batch for this class
+        dice_scores[class_id] = sum(batch_dice) / batch_size
 
     return dice_scores
