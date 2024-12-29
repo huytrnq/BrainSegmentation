@@ -9,56 +9,55 @@ import nibabel as nib
 
 import torch
 from torch.utils.data import Dataset
+from torchio import ScalarImage, LabelMap, Subject, SubjectsDataset
 
-class BrainMRIDataset(Dataset):
-    """ PyTorch dataset for loading 3D brain MRI volumes and their segmentation labels. """
+class BrainMRIDataset(SubjectsDataset):
+    """
+    TorchIO-based dataset for 3D Brain MRI volumes and segmentation labels.
+    """
+
     def __init__(self, root_dir, transform=None):
         """
         Args:
-            root_dir (str): Path to the root directory containing patient subfolders.
-            transform (callable, optional): Optional transform to be applied to samples.
+            root_dir (str): Path to the directory containing patient subfolders.
+                        Each subfolder should contain an MRI volume and a segmentation label.
+            transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.root_dir = root_dir
         self.transform = transform
+        self.subjects = self._get_subjects()
+        super().__init__(self.subjects, transform=transform)
 
-        # Collect all patient subfolders and their raw/segmentation paths
-        self.data = []
-        for patient_folder in sorted(os.listdir(root_dir)):
-            patient_path = os.path.join(root_dir, patient_folder)
+    def _get_subjects(self):
+        """
+        Collect all patient subfolders and create TorchIO subjects.
+
+        Returns:
+            list: A list of TorchIO Subject objects.
+        """
+        subjects = []
+        for patient_folder in sorted(os.listdir(self.root_dir)):
+            patient_path = os.path.join(self.root_dir, patient_folder)
             if os.path.isdir(patient_path):
-                # Initialize variables for raw and segmentation paths
-                raw_image = None
-                mask_image = None
-                # Iterate over files in the patient folder
-                for file in os.listdir(patient_path):
-                    if file.startswith('.'):  # Skip hidden files like .DS_Store
-                        continue
-                    if 'seg' in file.lower():  # Identify segmentation files
-                        mask_image = os.path.join(patient_path, file)
-                    else:  # Assume remaining files are raw images
-                        raw_image = os.path.join(patient_path, file)
-                # Ensure both raw and mask paths are found
-                if raw_image and mask_image:
-                    self.data.append((raw_image, mask_image))
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        raw_path, mask_path = self.data[idx]
-
-        # Load .nii.gz files using nibabel
-        image = nib.load(raw_path).get_fdata().astype(np.float32)
-        mask = nib.load(mask_path).get_fdata().astype(np.int64)
-
-        # Apply transformations if any
-        if self.transform:
-            image = self.transform(image)
-        # Convert to PyTorch tensors
-        image = torch.from_numpy(image).permute(3, 0, 1, 2)
-        mask = torch.from_numpy(mask).permute(3, 0, 1, 2)
-
-        return {'image': image, 'mask': mask}
+                # Find image and label files
+                image_path, label_path = None, None
+                for file_name in os.listdir(patient_path):
+                    if file_name.startswith('.'):
+                        continue  # Ignore hidden files
+                    file_path = os.path.join(patient_path, file_name)
+                    if 'seg' in file_name.lower():
+                        label_path = file_path
+                    else:
+                        image_path = file_path
+                
+                if image_path and label_path:
+                    # Create a TorchIO Subject
+                    subject = Subject(
+                        image=ScalarImage(image_path),
+                        mask=LabelMap(label_path)
+                    )
+                    subjects.append(subject)
+        return subjects
 
 
 
