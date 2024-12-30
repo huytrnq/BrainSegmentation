@@ -21,7 +21,7 @@ from utils.metric import MetricsMonitor, dice_coefficient, dice_score_3d
 #################### Hyperparameters ####################
 ROOT_DIR = './Data/'
 BATCH_SIZE = 16
-EPOCHS = 300
+EPOCHS = 100
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
 NUM_WORKERS = 0
 LR = 0.001
@@ -67,10 +67,10 @@ if __name__ == '__main__':
         ToTensorV2()
     ], additional_targets={'mask': 'mask'})
 
-    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=0, transform=train_transform, cache=True, ignore_background=False)
+    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=1, transform=train_transform, cache=True, ignore_background=False)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
 
-    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=0, transform=test_transform, cache=True, ignore_background=False)
+    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=1, transform=test_transform, cache=True, ignore_background=False)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
     #################### Model ####################
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     # Monitors
     train_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     val_monitor = MetricsMonitor(
-        metrics=["loss", "dice_score"], patience=50, mode="max"
+        metrics=["loss", "dice_score"], patience=20, mode="max"
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
@@ -101,7 +101,7 @@ if __name__ == '__main__':
     #################### MLflow ####################
     mlflow.log_param("model", model.__class__.__name__)
     mlflow.log_param("backbone", "efficientnet-b5")
-    mlflow.log_param("type", "2D slice_axis 0")
+    mlflow.log_param("type", "2D slice_axis 1")
     mlflow.log_param("batch_size", BATCH_SIZE)
     mlflow.log_param("epochs", EPOCHS)
     mlflow.log_param("learning_rate", LR)

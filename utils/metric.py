@@ -214,7 +214,7 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
     Compute the Dice Score for multi-class 3D volumes using PyTorch.
 
     Args:
-        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X]).
+        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X] or [batch_size, num_classes, Z, Y, X]).
         ground_truth (torch.Tensor): Ground truth segmentation (shape: [batch_size, Z, Y, X]).
         num_classes (int): Number of classes.
         smooth (float): Small smoothing factor to avoid division by zero.
@@ -222,32 +222,38 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
     Returns:
         dict: Dice Score for each class.
     """
+    # Ensure input tensors are PyTorch tensors
     if isinstance(prediction, np.ndarray):
         prediction = torch.from_numpy(prediction)
     if isinstance(ground_truth, np.ndarray):
         ground_truth = torch.from_numpy(ground_truth)
-        
-    # If prediction is a probability map, convert to class predictions
-    if prediction.size(1) != num_classes:
-        prediction = torch.argmax(prediction, dim=1)
-        
-    batch_size = prediction.size(0)
-    dice_scores = {class_id: 0.0 for class_id in range(num_classes)}
-    
-    for class_id in range(num_classes):
-        # Create binary masks for the current class
-        batch_dice = []
-        for i in range(batch_size):
-            pred_class = (prediction[i] == class_id).float()
-            gt_class = (ground_truth[i] == class_id).float()
 
-            # Compute Dice Score for the current volume in the batch
-            intersection = torch.sum(pred_class * gt_class)
-            union = torch.sum(pred_class) + torch.sum(gt_class)
-            dice = (2.0 * intersection + smooth) / (union + smooth)
-            batch_dice.append(dice.item())
-        
-        # Average Dice Score across the batch for this class
-        dice_scores[class_id] = sum(batch_dice) / batch_size
+    # If prediction is a probability map, convert to class predictions
+    if prediction.dim() == ground_truth.dim() + 1:
+        prediction = torch.argmax(prediction, dim=1)  # Convert probabilities to class indices
+
+    # Check tensor shapes
+    assert prediction.shape == ground_truth.shape, (
+        f"Shape mismatch: prediction {prediction.shape}, ground_truth {ground_truth.shape}"
+    )
+
+    # Initialize dictionary for Dice scores
+    dice_scores = {class_id: 0.0 for class_id in range(num_classes)}
+
+    # Compute Dice score for each class
+    for class_id in range(num_classes):
+        # Binary masks for the current class
+        pred_class = (prediction == class_id).float()
+        gt_class = (ground_truth == class_id).float()
+
+        # Compute intersection and union
+        intersection = torch.sum(pred_class * gt_class, dim=(1, 2, 3))  # Sum over spatial dimensions
+        union = torch.sum(pred_class, dim=(1, 2, 3)) + torch.sum(gt_class, dim=(1, 2, 3))  # Sum over spatial dimensions
+
+        # Compute Dice score for each sample in the batch
+        dice = (2.0 * intersection + smooth) / (union + smooth)
+
+        # Average Dice score across the batch
+        dice_scores[class_id] = dice.mean().item()
 
     return dice_scores
