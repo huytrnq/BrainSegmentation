@@ -1,5 +1,6 @@
 """Utility functions for training and testing the model."""
 
+import os
 import torch
 import numpy as np
 import nibabel as nib
@@ -99,6 +100,36 @@ def validate(model, valid_loader, criterion, device, monitor):
     monitor.print_final(phase="Validation")
     return {metric: monitor.compute_average(metric) for metric in monitor.metrics}
 
+
+
+def get_data_paths(data_dir):
+    """
+    Load image and label paths from a directory.
+
+    Args:
+        data_dir (str): Path to the data directory.
+
+    Returns:
+        list, list: List of image paths and list of label paths.
+    """
+    image_paths, label_paths = [], []
+    for patient_folder in sorted(os.listdir(data_dir)):
+        patient_path = os.path.join(data_dir, patient_folder)
+        if os.path.isdir(patient_path):
+            # Find image and label files
+            image_path, label_path = None, None
+            for file_name in os.listdir(patient_path):
+                if file_name.startswith('.'):
+                    continue  # Ignore hidden files
+                file_path = os.path.join(patient_path, file_name)
+                if 'seg' in file_name.lower():
+                    label_path = file_path
+                else:
+                    image_path = file_path
+            if image_path is not None and label_path is not None:
+                image_paths.append(image_path)
+                label_paths.append(label_path)
+    return image_paths, label_paths
 
 
 def merge_slices_to_nifti(segmented_slices, reference_nifti_path, output_nifti_path):

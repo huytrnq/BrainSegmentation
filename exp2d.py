@@ -1,10 +1,9 @@
 import os
 import numpy as np
-import dagshub
 import mlflow
+import dagshub
 dagshub.init(repo_owner='huytrnq', repo_name='BrainSegmentation', mlflow=True)
-# Start MLflow tracking
-mlflow.start_run(run_name="EfficientNet-UNet")
+
 
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -68,16 +67,16 @@ if __name__ == '__main__':
         ToTensorV2()
     ], additional_targets={'mask': 'mask'})
 
-    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=2, transform=train_transform, cache=True, ignore_background=True)
+    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=0, transform=train_transform, cache=True, ignore_background=False)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
 
-    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=2, transform=test_transform, cache=True, ignore_background=True)
+    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=0, transform=test_transform, cache=True, ignore_background=False)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
     #################### Model ####################
     
     model = smp.Segformer(
-        encoder_name="efficientnet-b4",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+        encoder_name="efficientnet-b5",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
         encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
         in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
         classes=4,                      # model output channels (number of classes in your dataset)
@@ -93,11 +92,16 @@ if __name__ == '__main__':
     # Monitors
     train_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     val_monitor = MetricsMonitor(
-        metrics=["loss", "dice_score"], patience=20, mode="max"
+        metrics=["loss", "dice_score"], patience=50, mode="max"
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
+    # Start MLflow tracking
+    mlflow.start_run(run_name="2D Segformer EfficientNet-B5")
     #################### MLflow ####################
+    mlflow.log_param("model", model.__class__.__name__)
+    mlflow.log_param("backbone", "efficientnet-b5")
+    mlflow.log_param("type", "2D slice_axis 0")
     mlflow.log_param("batch_size", BATCH_SIZE)
     mlflow.log_param("epochs", EPOCHS)
     mlflow.log_param("learning_rate", LR)
