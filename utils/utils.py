@@ -117,10 +117,11 @@ def train_3d(model, train_loader, criterion, optimizer, device, epoch, EPOCHS, N
     """
     model.train()
     train_loss = 0
+    avg_dice = []
     csf_dice = []
     gm_dice = []
     wm_dice = []
-    progress_bar = tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch + 1}/{EPOCHS}")
+    progress_bar = tqdm(train_loader, total=len(train_loader), desc=f"Training Epoch {epoch + 1}/{EPOCHS}")
     for batch in progress_bar:
         images, masks = batch["image"]["data"].to(device), batch["mask"]["data"].long().to(device)  # Adjust keys if necessary
 
@@ -140,6 +141,7 @@ def train_3d(model, train_loader, criterion, optimizer, device, epoch, EPOCHS, N
         pred = torch.argmax(outputs, dim=1) 
         masks = masks.squeeze(1)
         dice = dice_score_3d(pred, masks, NUM_CLASSES)
+        avg_dice.append(np.mean(list(dice.values())))
         csf_dice.append(dice[1])
         gm_dice.append(dice[2])
         wm_dice.append(dice[3])
@@ -148,8 +150,8 @@ def train_3d(model, train_loader, criterion, optimizer, device, epoch, EPOCHS, N
         progress_bar.set_postfix({"Loss": loss.item() / len(batch), "Avg Dice": np.mean(list(dice.values())), "CSF Dice": dice[1], "GM Dice": dice[2], "WM Dice": dice[3]})
 
     print(f"Epoch {epoch + 1}, Loss: {train_loss/len(train_loader):.4f}")
-    print(f"Epoch {epoch + 1}, Dice: {np.mean(list(dice.values())):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}")
-
+    print(f"Epoch {epoch + 1}, Dice: {np.mean(avg_dice):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}")
+    return train_loss/len(train_loader), np.mean(avg_dice), np.mean(csf_dice), np.mean(gm_dice), np.mean(wm_dice)
 
 def validate_3d(model, val_loader, criterion, device, epoch, EPOCHS, NUM_CLASSES):
     """Validate the model for one epoch - 3D version.
@@ -167,10 +169,11 @@ def validate_3d(model, val_loader, criterion, device, epoch, EPOCHS, NUM_CLASSES
 
     # Validation loop
     val_loss = 0
+    avg_dice = []
     csf_dice = []
     gm_dice = []
     wm_dice = []
-    progress_bar = tqdm(val_loader, total=len(val_loader), desc=f"Epoch {epoch + 1}/{EPOCHS}")
+    progress_bar = tqdm(val_loader, total=len(val_loader), desc=f"Validation Epoch {epoch + 1}/{EPOCHS}")
     with torch.no_grad():
         for batch in progress_bar:
             images, masks = batch["image"]["data"].to(device), batch["mask"]["data"].long().to(device)  # Adjust keys if necessary
@@ -186,6 +189,7 @@ def validate_3d(model, val_loader, criterion, device, epoch, EPOCHS, NUM_CLASSES
             pred = torch.argmax(outputs, dim=1) 
             masks = masks.squeeze(1)
             dice = dice_score_3d(pred, masks, NUM_CLASSES)
+            avg_dice.append(np.mean(list(dice.values())))
             csf_dice.append(dice[1])
             gm_dice.append(dice[2])
             wm_dice.append(dice[3])
@@ -194,8 +198,8 @@ def validate_3d(model, val_loader, criterion, device, epoch, EPOCHS, NUM_CLASSES
             progress_bar.set_postfix({"Loss": loss.item() / len(batch), "Avg Dice": np.mean(list(dice.values())), "CSF Dice": dice[1], "GM Dice": dice[2], "WM Dice": dice[3]})
 
         print(f"Epoch {epoch + 1}, Loss: {val_loss/len(val_loader):.4f}")
-        print(f"Epoch {epoch + 1}, Dice: {np.mean(list(dice.values())):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}")
-    
+        print(f"Epoch {epoch + 1}, Dice: {np.mean(avg_dice):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}\n")
+    return val_loss/len(val_loader), np.mean(avg_dice), np.mean(csf_dice), np.mean(gm_dice), np.mean(wm_dice)
 
 def get_data_paths(data_dir):
     """

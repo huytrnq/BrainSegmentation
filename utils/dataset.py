@@ -11,6 +11,10 @@ import torch
 from torch.utils.data import Dataset
 from torchio import ScalarImage, LabelMap, Subject, SubjectsDataset
 
+import torch
+import os
+from torchio import SubjectsDataset, Subject, ScalarImage, LabelMap
+
 class BrainMRIDataset(SubjectsDataset):
     """
     TorchIO-based dataset for 3D Brain MRI volumes and segmentation labels.
@@ -20,7 +24,7 @@ class BrainMRIDataset(SubjectsDataset):
         """
         Args:
             root_dir (str): Path to the directory containing patient subfolders.
-                        Each subfolder should contain an MRI volume and a segmentation label.
+                            Each subfolder should contain an MRI volume and a segmentation label.
             transform (callable, optional): Optional transform to be applied on a sample.
         """
         self.root_dir = root_dir
@@ -59,6 +63,51 @@ class BrainMRIDataset(SubjectsDataset):
                     subjects.append(subject)
         return subjects
 
+    def calculate_class_weights(self, num_classes):
+        """
+        Calculate class weights based on voxel distribution in segmentation labels.
+
+        Args:
+            num_classes (int): Number of segmentation classes.
+
+        Returns:
+            torch.Tensor: Class weights inversely proportional to class frequencies.
+        """
+        voxel_counts = torch.zeros(num_classes, dtype=torch.float32)
+
+        # Iterate over all subjects to accumulate voxel counts for each class
+        for subject in self.subjects:
+            label_map = subject['mask'].data  # Load the segmentation label
+            for class_id in range(num_classes):
+                voxel_counts[class_id] += (label_map == class_id).sum().item()
+
+        # Compute class weights (inverse frequency)
+        total_voxels = voxel_counts.sum().item()
+        class_weights = total_voxels / (voxel_counts + 1e-6)  # Avoid division by zero
+
+        return class_weights / class_weights.sum()  # Normalize weights
+    
+    def calculate_class_weights_log(self, num_classes):
+        """
+        Calculate class weights using a logarithmic adjustment.
+
+        Args:
+            num_classes (int): Number of segmentation classes.
+
+        Returns:
+            torch.Tensor: Log-adjusted class weights.
+        """
+        voxel_counts = torch.zeros(num_classes, dtype=torch.float32)
+
+        # Count voxels for each class
+        for subject in self.subjects:
+            label_map = subject['mask'].data  # Load the segmentation label
+            for class_id in range(num_classes):
+                voxel_counts[class_id] += (label_map == class_id).sum().item()
+
+        # Logarithmic adjustment
+        class_weights = 1.0 / (torch.log(voxel_counts + 1) + 1)
+        return class_weights / class_weights.sum()  # Normalize weights
 
 
 class BrainMRISliceDataset(Dataset):
