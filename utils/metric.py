@@ -228,10 +228,6 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
     if isinstance(ground_truth, np.ndarray):
         ground_truth = torch.from_numpy(ground_truth)
 
-    # If prediction is a probability map, convert to class predictions
-    if prediction.dim() == ground_truth.dim() + 1:
-        prediction = torch.argmax(prediction, dim=1)  # Convert probabilities to class indices
-
     # Check tensor shapes
     assert prediction.shape == ground_truth.shape, (
         f"Shape mismatch: prediction {prediction.shape}, ground_truth {ground_truth.shape}"
