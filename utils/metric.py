@@ -214,7 +214,7 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
     Compute the Dice Score for multi-class 3D volumes using PyTorch.
 
     Args:
-        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X] or [batch_size, num_classes, Z, Y, X]).
+        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X].
         ground_truth (torch.Tensor): Ground truth segmentation (shape: [batch_size, Z, Y, X]).
         num_classes (int): Number of classes.
         smooth (float): Small smoothing factor to avoid division by zero.

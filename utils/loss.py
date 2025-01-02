@@ -45,7 +45,7 @@ class DiceLoss(nn.Module):
 class DiceCrossEntropyLoss(nn.Module):
     __name__ = 'dice_cross_entropy_loss'
 
-    def __init__(self, dice_weight=0.5, ce_weight=0.5, smooth=1e-6, is_3d=False):
+    def __init__(self, dice_weight=0.5, ce_weight=0.5, smooth=1e-6, is_3d=False, class_weights=None):
         """
         Combined Dice and Cross-Entropy Loss for multi-class segmentation.
 
@@ -56,7 +56,7 @@ class DiceCrossEntropyLoss(nn.Module):
             is_3d (bool): Whether to use 3D segmentation (default: False for 2D segmentation).
         """
         super(DiceCrossEntropyLoss, self).__init__()
-        self.ce_loss = nn.CrossEntropyLoss()
+        self.ce_loss = nn.CrossEntropyLoss(weight=class_weights)
         self.dice_weight = dice_weight
         self.ce_weight = ce_weight
         self.smooth = smooth

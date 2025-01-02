@@ -139,6 +139,23 @@ class BrainMRISliceDataset(Dataset):
 
     def __len__(self):
         return len(self.slice_info)
+    
+    def _get_class_weights(self, num_classes=4):
+        """
+        Compute class weights for the dataset.
+        Args:
+            num_classes (int): Number of classes in the segmentation mask.
+        Returns:
+            torch.Tensor: A tensor containing the class weights.
+        """
+        class_counts = np.zeros(num_classes)
+        for image_path, label_path in self.image_label_pairs:
+            label = nib.load(label_path).get_fdata().astype(np.int64)
+            for class_idx in range(num_classes):
+                class_counts[class_idx] += np.sum(label == class_idx)
+        total_voxels = np.sum(class_counts)
+        class_weights = total_voxels / (num_classes * class_counts)
+        return torch.tensor(class_weights, dtype=torch.float32)
 
     def load_volume(self, path):
         """

@@ -1,10 +1,11 @@
 """Utility functions for training and testing the model."""
 
 import os
+from tqdm import tqdm
 import torch
 import numpy as np
 import nibabel as nib
-from utils.metric import accuracy, dice_coefficient
+from utils.metric import accuracy, dice_coefficient, dice_score_3d
 
 
 def train(model, train_loader, criterion, optimizer, device, monitor):
@@ -101,6 +102,100 @@ def validate(model, valid_loader, criterion, device, monitor):
     return {metric: monitor.compute_average(metric) for metric in monitor.metrics}
 
 
+def train_3d(model, train_loader, criterion, optimizer, device, epoch, EPOCHS, NUM_CLASSES):
+    """Train the model for one epoch - 3D version.
+
+    Args:
+        model: PyTorch model to train.
+        train_loader: DataLoader for the training dataset.
+        criterion: Loss function.
+        optimizer: Optimizer for updating model weights.
+        device: Device to run the training on (CPU or GPU).
+        epoch (int): Current epoch number.
+        EPOCHS (int): Total number of EPOCHS.
+        NUM_CLASSES (int): Number of classes in the segmentation mask.
+    """
+    model.train()
+    train_loss = 0
+    csf_dice = []
+    gm_dice = []
+    wm_dice = []
+    progress_bar = tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch + 1}/{EPOCHS}")
+    for batch in progress_bar:
+        images, masks = batch["image"]["data"].to(device), batch["mask"]["data"].long().to(device)  # Adjust keys if necessary
+
+        # Forward pass
+        outputs = model(images)
+
+        # Compute loss
+        loss = criterion(outputs, masks)
+        train_loss += loss.item()
+
+        # Backward pass and optimization
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Dice score
+        pred = torch.argmax(outputs, dim=1) 
+        masks = masks.squeeze(1)
+        dice = dice_score_3d(pred, masks, NUM_CLASSES)
+        csf_dice.append(dice[1])
+        gm_dice.append(dice[2])
+        wm_dice.append(dice[3])
+        
+        #update the progress bar
+        progress_bar.set_postfix({"Loss": loss.item() / len(batch), "Avg Dice": np.mean(list(dice.values())), "CSF Dice": dice[1], "GM Dice": dice[2], "WM Dice": dice[3]})
+
+    print(f"Epoch {epoch + 1}, Loss: {train_loss/len(train_loader):.4f}")
+    print(f"Epoch {epoch + 1}, Dice: {np.mean(list(dice.values())):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}")
+
+
+def validate_3d(model, val_loader, criterion, device, epoch, EPOCHS, NUM_CLASSES):
+    """Validate the model for one epoch - 3D version.
+
+    Args:
+        model: PyTorch model to evaluate.
+        val_loader: DataLoader for the validation dataset.
+        criterion: Loss function.
+        device: Device to run the evaluation on (CPU or GPU).
+        epoch (int): Current epoch number.
+        EPOCHS (int): Total number of epochs.
+        NUM_CLASSES (int): Number of classes in the segmentation mask.
+    """
+    model.eval() # Set the model to evaluation mode
+
+    # Validation loop
+    val_loss = 0
+    csf_dice = []
+    gm_dice = []
+    wm_dice = []
+    progress_bar = tqdm(val_loader, total=len(val_loader), desc=f"Epoch {epoch + 1}/{EPOCHS}")
+    with torch.no_grad():
+        for batch in progress_bar:
+            images, masks = batch["image"]["data"].to(device), batch["mask"]["data"].long().to(device)  # Adjust keys if necessary
+
+            # Forward pass
+            outputs = model(images)
+
+            # Compute loss
+            loss = criterion(outputs, masks)
+            val_loss += loss.item()
+
+            # Dice score
+            pred = torch.argmax(outputs, dim=1) 
+            masks = masks.squeeze(1)
+            dice = dice_score_3d(pred, masks, NUM_CLASSES)
+            csf_dice.append(dice[1])
+            gm_dice.append(dice[2])
+            wm_dice.append(dice[3])
+            
+            #update the progress bar
+            progress_bar.set_postfix({"Loss": loss.item() / len(batch), "Avg Dice": np.mean(list(dice.values())), "CSF Dice": dice[1], "GM Dice": dice[2], "WM Dice": dice[3]})
+
+        print(f"Epoch {epoch + 1}, Loss: {val_loss/len(val_loader):.4f}")
+        print(f"Epoch {epoch + 1}, Dice: {np.mean(list(dice.values())):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}")
+    
 
 def get_data_paths(data_dir):
     """
