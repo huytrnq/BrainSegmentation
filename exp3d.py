@@ -14,7 +14,7 @@ import torchio as tio
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="torchio")
 
-from utils.utils import train_3d, validate_3d
+from utils.utils import train_3d, validate_3d, save_model_config_to_file
 from utils.vis import plot_mri
 from utils.dataset import BrainMRIDataset
 from utils.loss import DiceCrossEntropyLoss, DiceFocalLoss
@@ -30,6 +30,7 @@ if __name__ == '__main__':
     NUM_WORKERS=16
     DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
     LR = 0.01
+    MODEL_CONFIG_PATH = 'model_config.json'
 
     #################### DataLoaders ####################
     # TorchIO transformations for augmentation
@@ -69,6 +70,7 @@ if __name__ == '__main__':
     #     dropout_prob=0.2,
     # )
     model = model.to(DEVICE)
+    save_model_config_to_file(model, MODEL_CONFIG_PATH)
 
     #################### Loss, Optimizer, Scheduler ####################
     criterion = DiceFocalLoss(alpha=[0.05, 0.5, 0.3, 0.3], gamma=2, is_3d=True, ignore_background=False)
@@ -85,6 +87,7 @@ if __name__ == '__main__':
     mlflow.log_param("criterion", criterion.__class__.__name__)
     mlflow.log_param("optimizer", optimizer.__class__.__name__)
     mlflow.log_param("scheduler", scheduler.__class__.__name__)
+    mlflow.log_artifact(MODEL_CONFIG_PATH)
 
     #################### Training Loop ####################
     model_export_path = f"model_{model.__class__.__name__}_3d.pth"

@@ -230,41 +230,40 @@ def get_data_paths(data_dir):
                 label_paths.append(label_path)
     return image_paths, label_paths
 
-
-def merge_slices_to_nifti(segmented_slices, reference_nifti_path, output_nifti_path):
+def get_model_hyperparameters(model):
     """
-    Merge 2D segmented slices into a 3D NIfTI file.
-    
+    Extracts hyperparameters and top-level attributes from a PyTorch model.
+
     Args:
-        segmented_slices (list or ndarray): List or array of 2D segmented slices (shape: [depth, height, width]).
-        reference_nifti_path (str): Path to the reference NIfTI file to get affine and header information.
-        output_nifti_path (str): Path to save the merged 3D NIfTI file.
-    """
-    # Convert the list of 2D slices into a 3D NumPy array if needed
-    if isinstance(segmented_slices, list):
-        segmented_3d = np.stack(segmented_slices, axis=0)  # Shape: [depth, height, width]
-    else:
-        segmented_3d = segmented_slices  # Already in 3D format
-    
-    # Ensure the array has the correct shape: [Z, Y, X]
-    if segmented_3d.ndim != 3:
-        raise ValueError(f"Expected 3D array, but got shape {segmented_3d.shape}")
-    
-    # Load reference NIfTI file to get affine and header information
-    reference_nifti = nib.load(reference_nifti_path)
-    affine = reference_nifti.affine
-    header = reference_nifti.header
-    
-    # Create a new NIfTI image
-    segmented_nifti = nib.Nifti1Image(segmented_3d.astype(np.uint8), affine, header)
-    
-    # Save the new NIfTI file
-    nib.save(segmented_nifti, output_nifti_path)
-    print(f"Saved 3D segmented NIfTI file to: {output_nifti_path}")
+        model (torch.nn.Module): The PyTorch model.
 
-# Example usage
-# Assume segmented_slices is a list of 2D arrays [slice1, slice2, ...]
-# segmented_slices = [slice1, slice2, slice3, ...]
-# reference_nifti_path = "path_to_reference_file.nii"
-# output_nifti_path = "segmented_output.nii"
-# merge_slices_to_nifti(segmented_slices, reference_nifti_path, output_nifti_path)
+    Returns:
+        dict: A dictionary containing model hyperparameters and parameter shapes.
+    """
+    config = {}
+
+    # Retrieve attributes if available (e.g., from UNet or custom models)
+    if hasattr(model, "__dict__"):
+        config.update({key: value for key, value in vars(model).items() if not key.startswith("_")})
+
+    # Include parameter shapes for learnable parameters
+    for name, param in model.named_parameters():
+        config[f"param_{name}"] = list(param.shape)
+
+    return config
+
+
+def save_model_config_to_file(model, file_path="model_config.json"):
+    """
+    Save the model configuration to a file in JSON format.
+
+    Args:
+        model (torch.nn.Module): The PyTorch model.
+        file_path (str): Path to save the configuration file.
+    """
+    # Extract model hyperparameters
+    model_config = get_model_hyperparameters(model)
+    
+    # Save as JSON
+    with open(file_path, "w") as f:
+        json.dump(model_config, f, indent=4)
