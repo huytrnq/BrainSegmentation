@@ -1,10 +1,12 @@
 """Utility functions for training and testing the model."""
 
 import os
+import json
 from tqdm import tqdm
-import torch
 import numpy as np
 import nibabel as nib
+import torch
+import torchio as tio
 from utils.metric import dice_coefficient, dice_score_3d
 
 
@@ -200,6 +202,70 @@ def validate_3d(model, val_loader, criterion, device, epoch, EPOCHS, NUM_CLASSES
         print(f"Epoch {epoch + 1}, Loss: {val_loss/len(val_loader):.4f}")
         print(f"Epoch {epoch + 1}, Dice: {np.mean(avg_dice):.4f}", f"CSF Dice: {np.mean(csf_dice):.4f}", f"GM Dice: {np.mean(gm_dice):.4f}", f"WM Dice: {np.mean(wm_dice):.4f}\n")
     return val_loss/len(val_loader), np.mean(avg_dice), np.mean(csf_dice), np.mean(gm_dice), np.mean(wm_dice)
+
+
+def validate_3d_patch(model, val_dataset, criterion, epoch, EPOCHS, DEVICE, NUM_CLASSES, PATCH_SIZE, BATCH_SIZE, NUM_WORKERS):
+    losses = []
+    predicts = []  # To store segmented images in their original size
+    masks = []
+    avg_dice = []
+    csf_dice = []
+    gm_dice = []
+    wm_dice = []
+    for subject in tqdm(val_dataset):
+        # Get the mask as numpy
+        mask = subject['mask'][tio.DATA]
+        
+        # Initialize GridSampler and GridAggregator
+        grid_sampler = tio.inference.GridSampler(
+            subject=subject,
+            patch_size=PATCH_SIZE,
+            patch_overlap=0,  # Adjust overlap as needed
+        )
+        aggregator = tio.inference.GridAggregator(grid_sampler)
+
+        # Create DataLoader for patch-based inference
+        val_loader = torch.utils.data.DataLoader(
+            grid_sampler,
+            batch_size=BATCH_SIZE,
+            num_workers=NUM_WORKERS,
+        )
+
+        # Perform inference on patches
+        with torch.no_grad():
+            for batch in val_loader:
+                inputs = batch['image'][tio.DATA].to(DEVICE)
+                patch_mask = batch['mask'][tio.DATA].long().to(DEVICE)
+                locations = batch[tio.LOCATION]  # Patch locations
+                predictions = model(inputs)  # Replace with your model inference
+                loss = criterion(predictions, patch_mask)
+                losses.append(loss.item())
+                aggregator.add_batch(predictions, locations)
+
+                # Aggregate predictions into the original image size
+                aggregated_prediction = aggregator.get_output_tensor().cpu()
+
+        # Store the segmented image and mask
+        predicts.append(aggregated_prediction)
+        masks.append(mask)
+    
+    # Convert to tensors
+    predicts = torch.stack(predicts, dim=0)
+    masks = torch.stack(masks, dim=0)
+    predicts = torch.argmax(predicts, dim=1)
+    masks = masks.squeeze(1)
+    # Calculate Dice scores
+    dice = dice_score_3d(predicts, masks, NUM_CLASSES)
+    avg_dice.append(np.mean(list(dice.values())))
+    csf_dice.append(dice[1])
+    gm_dice.append(dice[2])
+    wm_dice.append(dice[3])
+    
+    # Print results
+    print(f'Epoch {epoch+1}/{EPOCHS}, Loss: {np.mean(losses):.4f}, Avg Dice: {np.mean(avg_dice):.4f}, CSF Dice: {np.mean(csf_dice):.4f}, GM Dice: {np.mean(gm_dice):.4f}, WM Dice: {np.mean(wm_dice):.4f}')
+    
+    return np.mean(losses), np.mean(avg_dice), np.mean(csf_dice), np.mean(gm_dice), np.mean(wm_dice)
+
 
 def get_data_paths(data_dir):
     """
