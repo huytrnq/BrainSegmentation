@@ -9,6 +9,7 @@ import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
+from monai.networks.nets import UNet, AttentionUnet, UNETR
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -59,27 +60,29 @@ if __name__ == '__main__':
         ToTensorV2()
     ], additional_targets={'mask': 'mask'})
 
-    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=0, transform=train_transform, cache=True, ignore_background=False)
+    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=2, transform=train_transform, cache=True, ignore_background=False)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
 
-    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=0, transform=test_transform, cache=True, ignore_background=False)
+    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=2, transform=test_transform, cache=True, ignore_background=False)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
     #################### Model ####################
     
-    model = smp.Unet(
-        encoder_name="efficientnet-b3",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
-        # encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
-        in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-        classes=4,                      # model output channels (number of classes in your dataset)
-    )
+    # model = smp.Unet(
+    #     encoder_name="efficientnet-b3",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+    #     # encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+    #     in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+    #     classes=4,                      # model output channels (number of classes in your dataset)
+    # )
+    model = UNETR(in_channels=1, out_channels=4, img_size=256, feature_size=32, norm_name='batch', spatial_dims=2)
     model = model.to(DEVICE)
     
-    class_weights = train_dataset._get_class_weights(num_classes=4)
+    # class_weights = train_dataset._get_class_weights(num_classes=4)
     #################### Loss, Optimizer, Scheduler ####################
-    criterion = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5, class_weights=class_weights).to(DEVICE)
+    # criterion = DiceCrossEntropyLoss(dice_weight=1.0, ce_weight=0.0, class_weights=class_weights).to(DEVICE)
+    criterion = DiceFocalLoss(alpha=[0.05, 0.50, 0.25, 0.20], gamma=1.5, is_3d=False, ignore_background=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-    scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-5)
+    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
     
     #################### Training ####################
     # Monitors
@@ -94,7 +97,7 @@ if __name__ == '__main__':
     #################### MLflow ####################
     mlflow.log_param("model", model.__class__.__name__)
     mlflow.log_param("backbone", "efficientnet-b3")
-    mlflow.log_param("type", "2D slice_axis 0")
+    mlflow.log_param("type", "2D slice_axis 2")
     mlflow.log_param("batch_size", BATCH_SIZE)
     mlflow.log_param("epochs", EPOCHS)
     mlflow.log_param("learning_rate", LR)
@@ -102,7 +105,7 @@ if __name__ == '__main__':
     mlflow.log_param("optimizer", optimizer.__class__.__name__)
     mlflow.log_param("scheduler", scheduler.__class__.__name__)
     mlflow.log_param("criterion", criterion.__class__.__name__)   
-    mlflow.log_param("class_weights", class_weights) 
+    # mlflow.log_param("class_weights", class_weights) 
 
     for epoch in range(EPOCHS):
         print(f"Epoch {epoch + 1}/{EPOCHS}")
@@ -170,7 +173,7 @@ if __name__ == '__main__':
     labels = np.array(labels).reshape(N_TEST, -1, 128, 256)
     dices = dice_score_3d(predictions, labels, num_classes=4)
     print(dices)
-    mlflow.log_metric("3d_dice_score", np.mean(dices))
+    mlflow.log_metric("3d_dice_score", np.mean(dices.values()))
     mlflow.log_metric("3d_wm_dice_score", dices[1])
     mlflow.log_metric("3d_gm_dice_score", dices[2])
     mlflow.log_metric("3d_csf_dice_score", dices[3])

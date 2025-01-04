@@ -1,0 +1,15 @@
+artifact_uri: file:///root/huy/BrainSegmentation/mlruns/0/469d520f99724821ae378ef2c961155b/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 469d520f99724821ae378ef2c961155b
+run_name: 3D Brain MRI Segmentation
+run_uuid: 469d520f99724821ae378ef2c961155b
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735973316714
+status: 1
+tags: []
+user_id: root
