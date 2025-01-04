@@ -48,7 +48,14 @@ if __name__ == '__main__':
     train_dataset = BrainMRIDataset(os.path.join(ROOT_DIR, 'train'), transform=train_transform)
     val_dataset = BrainMRIDataset(os.path.join(ROOT_DIR, 'val'), transform=val_transform)
 
-    sampler = tio.data.UniformSampler(PATCH_SIZE)
+    # sampler = tio.data.UniformSampler(PATCH_SIZE)
+    # Create a LabelSampler that focuses on the specified label
+    label_probabilities = {0: 0, 1: 2, 2: 1, 3: 1}
+
+    sampler = tio.LabelSampler(
+        patch_size=PATCH_SIZE,
+        label_probabilities=label_probabilities,
+    )
 
     patches_queue = tio.Queue(
         subjects_dataset=train_dataset,
