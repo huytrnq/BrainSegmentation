@@ -4,6 +4,7 @@ It is used to monitor the performance of the model during training and validatio
 """
 
 import numpy as np
+from scipy.spatial import cKDTree
 import torch
 
 
@@ -253,3 +254,47 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
         dice_scores[class_id] = dice.mean().item()
 
     return dice_scores
+
+
+
+def hausdorff_distance(pred, masks, num_classes, is_3d=True):
+    """
+    Compute Hausdorff Distance (HD) for segmentation between prediction and ground truth masks.
+
+    Args:
+        pred (torch.Tensor): Predicted mask.
+            - Shape for 2D: [H, W] or [B, H, W].
+            - Shape for 3D: [D, H, W] or [B, D, H, W].
+        masks (torch.Tensor): Ground truth mask.
+            - Shape for 2D: [H, W] or [B, H, W].
+            - Shape for 3D: [D, H, W] or [B, D, H, W].
+        num_classes (int): Number of classes in the segmentation.
+        is_3d (bool): Whether to compute 3D metrics. Defaults to True.
+
+    Returns:
+        list: Hausdorff Distance for each class.
+    """
+    pred_np = pred.cpu().numpy()
+    masks_np = masks.cpu().numpy()
+
+    if pred_np.ndim == 4 and not is_3d:  # If batch is provided for 2D, process batch-wise
+        pred_np = pred_np[0]
+        masks_np = masks_np[0]
+
+    hd_per_class = []
+    for c in range(num_classes):
+        pred_coords = np.argwhere(pred_np == c)
+        masks_coords = np.argwhere(masks_np == c)
+
+        if not len(pred_coords) or not len(masks_coords):
+            hd_per_class.append(np.inf)
+            continue
+
+        pred_tree = cKDTree(pred_coords)
+        masks_tree = cKDTree(masks_coords)
+
+        forward_hd = np.max(pred_tree.query(masks_coords, k=1)[0])
+        backward_hd = np.max(masks_tree.query(pred_coords, k=1)[0])
+        hd_per_class.append(max(forward_hd, backward_hd))
+
+    return hd_per_class

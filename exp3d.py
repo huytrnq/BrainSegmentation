@@ -29,7 +29,7 @@ if __name__ == '__main__':
     NUM_CLASSES = 4
     NUM_WORKERS=16
     DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
-    LR = 0.001
+    LR = 0.01
 
     #################### DataLoaders ####################
     # TorchIO transformations for augmentation
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     #     out_channels=3,
     #     dropout_prob=0.2,
     # )
-    # model = model.to(DEVICE)
+    model = model.to(DEVICE)
 
     #################### Loss, Optimizer, Scheduler ####################
     criterion = DiceFocalLoss(alpha=[0.05, 0.5, 0.3, 0.3], gamma=2, is_3d=True, ignore_background=False)

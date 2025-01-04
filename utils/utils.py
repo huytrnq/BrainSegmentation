@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch
 import numpy as np
 import nibabel as nib
-from utils.metric import accuracy, dice_coefficient, dice_score_3d
+from utils.metric import dice_coefficient, dice_score_3d
 
 
 def train(model, train_loader, criterion, optimizer, device, monitor):
