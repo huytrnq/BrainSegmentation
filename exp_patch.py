@@ -131,7 +131,6 @@ if __name__ == '__main__':
         if val_avg_dice > best_avg_dice:
             best_avg_dice = val_avg_dice
             torch.save(model.state_dict(), 'best_model_3d.pth')
-            mlflow.log_artifact('best_model_3d.pth')
             print(f'Best model saved with dice score: {best_avg_dice}\n')
     
     #################### Log Final Model ####################
