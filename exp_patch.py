@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="torchio")
 
 from utils.utils import train_3d, validate_3d_patch, save_model_config_to_file
 from utils.dataset import BrainMRIDataset
-from utils.loss import DiceFocalLoss
+from utils.loss import DiceFocalLoss, DiceCrossEntropyLoss
 from monai.networks.nets import UNet
 
 if __name__ == '__main__':
@@ -36,6 +36,8 @@ if __name__ == '__main__':
     
     #################### DataLoaders ####################
     train_transform = tio.Compose([
+        # tio.RandomElasticDeformation(num_control_points=(7, 7, 7), max_displacement=(4, 4, 4)),
+        # tio.RandomFlip(axes=(0, 1, 2)),
         tio.RescaleIntensity((0, 1)),
         tio.ZNormalization(),
     ])
@@ -50,7 +52,7 @@ if __name__ == '__main__':
 
     # sampler = tio.data.UniformSampler(PATCH_SIZE)
     # Create a LabelSampler that focuses on the specified label
-    label_probabilities = {0: 0, 1: 2, 2: 1, 3: 1}
+    label_probabilities = {0: 1, 1: 3, 2: 2, 3: 2}
 
     sampler = tio.LabelSampler(
         patch_size=PATCH_SIZE,
@@ -78,28 +80,29 @@ if __name__ == '__main__':
         strides=(2, 2, 2, 2),
         num_res_units=4,
         norm="instance",
-        dropout=0.2
+        dropout=0.1
     )
     model = model.to(DEVICE)
     save_model_config_to_file(model, MODEL_CONFIG_PATH)
 
     #################### Loss, Optimizer, and Scheduler ####################
-    criterion = DiceFocalLoss(alpha=0.5, gamma=2, is_3d=True, ignore_background=False)
+    # criterion = DiceFocalLoss(alpha=0.5, gamma=2, is_3d=True, ignore_background=False)
+    criterion = DiceCrossEntropyLoss(is_3d=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-7)
 
     #################### Start MLflow Run ####################
-    mlflow.start_run(run_name="3D Brain MRI Segmentation")
+    mlflow.start_run(run_name="3D Brain MRI Segmentation - Patch")
     mlflow.log_param("batch_size", BATCH_SIZE)
     mlflow.log_param("epochs", EPOCHS)
     mlflow.log_param("num_classes", NUM_CLASSES)
     mlflow.log_param("learning_rate", LR)
     mlflow.log_param("model", model.__class__.__name__)
     mlflow.log_param("criterion", criterion.__class__.__name__)
-    mlflow.log_param("alpha", criterion.alpha)
-    mlflow.log_param("gamma", criterion.gamma)
-    mlflow.log_param("focal_weight", criterion.focal_weight)
-    mlflow.log_param("dice_weight", criterion.dice_weight)
+    # mlflow.log_param("alpha", criterion.alpha)
+    # mlflow.log_param("gamma", criterion.gamma)
+    # mlflow.log_param("focal_weight", criterion.focal_weight)
+    # mlflow.log_param("dice_weight", criterion.dice_weight)
     mlflow.log_param("optimizer", optimizer.__class__.__name__)
     mlflow.log_param("scheduler", scheduler.__class__.__name__)
     mlflow.log_artifact(MODEL_CONFIG_PATH)

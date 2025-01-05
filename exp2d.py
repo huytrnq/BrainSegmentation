@@ -36,15 +36,15 @@ if __name__ == '__main__':
         A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
         A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
         # Spatial Transformations
-        A.OneOf([
-            A.Affine(scale=(0.8, 1.2), translate_percent=(0.1, 0.2), rotate=(-30, 30), p=1.0),  # Scaling, Rotation, Shearing
-        ], p=0.5),  # 50% chance to apply one of the spatial transforms
+        # A.OneOf([
+        #     A.Affine(scale=(0.8, 1.2), translate_percent=(0.1, 0.2), rotate=(-30, 30), p=1.0),  # Scaling, Rotation, Shearing
+        # ], p=0.5),  # 50% chance to apply one of the spatial transforms
 
-        # Other Transformations
-        A.OneOf([
-            A.HorizontalFlip(p=1.0),  # Mirroring
-            A.VerticalFlip(p=1.0),  # Mirroring
-        ], p=0.5),
+        # # Other Transformations
+        # A.OneOf([
+        #     A.HorizontalFlip(p=1.0),  # Mirroring
+        #     A.VerticalFlip(p=1.0),  # Mirroring
+        # ], p=0.5),
 
         # Normalize and convert to tensors
         RobustZNormalization(),

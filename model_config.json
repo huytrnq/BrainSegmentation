@@ -21,7 +21,7 @@
     "num_res_units": 4,
     "act": "PRELU",
     "norm": "instance",
-    "dropout": 0.2,
+    "dropout": 0.1,
     "bias": true,
     "adn_ordering": "NDA",
     "param_model.0.conv.unit0.conv.weight": [
