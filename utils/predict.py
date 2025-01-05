@@ -24,27 +24,33 @@ class Predictor:
         else:
             raise ValueError("Either 'model' or 'mlflow_model_uri' must be provided.")
     
-    def predict_full_volume(self, volume, batch_size=1, proba=False):
+    def predict_full_volume(self, dataloader, proba=False):
         """
-        Perform full-volume prediction.
+        Perform full-volume prediction for all subjects in a dataloader.
 
         Args:
-            volume (torch.Tensor): Input volume with shape [1, D, H, W].
-            batch_size (int): Batch size for prediction.
+            dataloader (torch.utils.data.DataLoader): Dataloader for the dataset.
             proba (bool): Whether to return probabilities.
 
         Returns:
-            torch.Tensor: Predicted segmentation volume.
+            list: List of predicted segmentation volumes or probabilities for each subject.
         """
         self.model.eval()
-        volume = volume.to(self.device).unsqueeze(0)  # Add batch dimension
+        results = []
+
         with torch.no_grad():
-            outputs = self.model(volume)
-        if proba:
-            predictions = outputs
-        else:
-            predictions = torch.argmax(outputs, dim=1).squeeze(0)  # Remove batch dimension
-        return predictions.cpu()
+            for batch in dataloader:
+                inputs = batch["image"][tio.DATA].to(self.device)
+                outputs = self.model(inputs)
+
+                if proba:
+                    predictions = torch.softmax(outputs, dim=1)  # Return probabilities
+                else:
+                    predictions = torch.argmax(outputs, dim=1)  # Return class labels
+
+                results.append(predictions.cpu())
+        
+        return torch.stack(results, dim=0)
 
     def predict_patches(self, subject, batch_size=1, overlap=0, proba=False):
         """
@@ -73,6 +79,7 @@ class Predictor:
 
         if proba:
             prediction = aggregator.get_output_tensor()
+            prediction = torch.softmax(prediction, dim=0)  # probabilities
         else:
             prediction = torch.argmax(aggregator.get_output_tensor(), dim=0)  # Aggregate predictions
         return prediction.cpu()
