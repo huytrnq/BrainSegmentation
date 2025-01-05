@@ -28,7 +28,7 @@ The dataset used in this study is the IBSR18, containing 18 T1-weighted scans of
     - Normalize intensity values for consistent pixel distributions.
     - Apply data augmentation techniques (e.g., rotations, flips) to enhance training diversity.
 
-### 3D Segmentation
+### Full Volume Segmentation
 - Description: Directly processes full 3D MRI volumes to retain spatial context and provide higher segmentation accuracy.
 - Steps:
     - Normalize intensity values.
