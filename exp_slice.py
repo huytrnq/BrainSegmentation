@@ -14,7 +14,7 @@ from monai.networks.nets import UNet, AttentionUnet, UNETR
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from utils.loss import DiceCrossEntropyLoss, DiceFocalLoss
-from utils.dataset import BrainMRISliceDataset
+from utils.dataset import BrainMRISliceDataset, WeightedLabelSampler
 from utils.utils import train, validate
 from utils.metric import MetricsMonitor, dice_coefficient, dice_score_3d
 from utils.transforms import RobustZNormalization
@@ -24,8 +24,8 @@ ROOT_DIR = './Data/'
 BATCH_SIZE = 16
 EPOCHS = 200
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
-NUM_WORKERS = 0
-LR = 0.001
+NUM_WORKERS = 8
+LR = 0.01
 N_TEST = 5
 
 if __name__ == '__main__':    
@@ -61,28 +61,31 @@ if __name__ == '__main__':
     ], additional_targets={'mask': 'mask'})
 
     train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=2, transform=train_transform, cache=True, ignore_background=False)
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
+    label_probabilities = {0: 1, 1: 3, 2: 2, 3: 2}  # Example: More focus on class 1
+    # Create the sampler
+    sampler = WeightedLabelSampler(dataset=train_dataset, label_probabilities=label_probabilities)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, sampler=sampler)
 
     val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=2, transform=test_transform, cache=True, ignore_background=False)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
     #################### Model ####################
     
-    # model = smp.Unet(
-    #     encoder_name="efficientnet-b3",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
-    #     # encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
-    #     in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
-    #     classes=4,                      # model output channels (number of classes in your dataset)
-    # )
-    model = UNETR(in_channels=1, out_channels=4, img_size=256, feature_size=32, norm_name='batch', spatial_dims=2)
+    model = smp.Unet(
+        encoder_name="efficientnet-b5",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+        encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
+        in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+        classes=4,                      # model output channels (number of classes in your dataset)
+    )
+    # model = UNETR(in_channels=1, out_channels=4, img_size=256, feature_size=32, norm_name='batch', spatial_dims=2)
     model = model.to(DEVICE)
     
-    # class_weights = train_dataset._get_class_weights(num_classes=4)
+    class_weights = train_dataset._get_class_weights(num_classes=4)
     #################### Loss, Optimizer, Scheduler ####################
-    # criterion = DiceCrossEntropyLoss(dice_weight=1.0, ce_weight=0.0, class_weights=class_weights).to(DEVICE)
-    criterion = DiceFocalLoss(alpha=[0.05, 0.50, 0.25, 0.20], gamma=1.5, is_3d=False, ignore_background=False)
+    criterion = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5, class_weights=class_weights).to(DEVICE)
+    # criterion = DiceFocalLoss(alpha=[0.05, 0.50, 0.25, 0.20], gamma=1.5, is_3d=False, ignore_background=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-5)
+    scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-7)
     
     #################### Training ####################
     # Monitors
@@ -96,7 +99,7 @@ if __name__ == '__main__':
     mlflow.start_run(run_name="2D Unet EfficientNet-B3")
     #################### MLflow ####################
     mlflow.log_param("model", model.__class__.__name__)
-    mlflow.log_param("backbone", "efficientnet-b3")
+    mlflow.log_param("backbone", "efficientnet-b5")
     mlflow.log_param("type", "2D slice_axis 2")
     mlflow.log_param("batch_size", BATCH_SIZE)
     mlflow.log_param("epochs", EPOCHS)
@@ -169,11 +172,11 @@ if __name__ == '__main__':
     #################### 3D Evaluation ####################
     # Split the predictions and labels into volumes
     predictions = torch.argmax(predictions, dim=1).numpy()
-    predictions = np.array(predictions).reshape(N_TEST, -1, 128, 256)
-    labels = np.array(labels).reshape(N_TEST, -1, 128, 256)
+    predictions = np.array(predictions).reshape(N_TEST, -1, 256, 256)
+    labels = np.array(labels).reshape(N_TEST, -1, 256, 256)
     dices = dice_score_3d(predictions, labels, num_classes=4)
     print(dices)
-    mlflow.log_metric("3d_dice_score", np.mean(dices.values()))
+    mlflow.log_metric("3d_dice_score", np.mean(list(dices.values())))
     mlflow.log_metric("3d_wm_dice_score", dices[1])
     mlflow.log_metric("3d_gm_dice_score", dices[2])
     mlflow.log_metric("3d_csf_dice_score", dices[3])
