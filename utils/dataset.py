@@ -9,11 +9,9 @@ import nibabel as nib
 
 import torch
 from torch.utils.data import Dataset
+from torch.utils.data import Sampler
 from torchio import ScalarImage, LabelMap, Subject, SubjectsDataset
 
-import torch
-import os
-from torchio import SubjectsDataset, Subject, ScalarImage, LabelMap
 
 class BrainMRIDataset(SubjectsDataset):
     """
@@ -59,6 +57,12 @@ class BrainMRIDataset(SubjectsDataset):
                     subject = Subject(
                         image=ScalarImage(image_path),
                         mask=LabelMap(label_path)
+                    )
+                    subjects.append(subject)
+                elif image_path:
+                    # Create a TorchIO Subject with only the image
+                    subject = Subject(
+                        image=ScalarImage(image_path)
                     )
                     subjects.append(subject)
         return subjects
@@ -108,6 +112,63 @@ class BrainMRIDataset(SubjectsDataset):
         # Logarithmic adjustment
         class_weights = 1.0 / (torch.log(voxel_counts + 1) + 1)
         return class_weights / class_weights.sum()  # Normalize weights
+
+
+class WeightedLabelSampler(Sampler):
+    """
+    Custom sampler to sample slices based on weighted label probabilities.
+    """
+    def __init__(self, dataset, label_probabilities, num_samples=None):
+        """
+        Args:
+            dataset (BrainMRISliceDataset): The dataset instance.
+            label_probabilities (dict): A dictionary containing probabilities for each label.
+                Example: {0: 0, 1: 2, 2: 1, 3: 1}
+            num_samples (int, optional): Total number of samples to draw. Defaults to the dataset length.
+        """
+        self.dataset = dataset
+        self.label_probabilities = label_probabilities
+        self.num_samples = num_samples if num_samples is not None else len(dataset)
+        self.slice_weights = self._compute_weights()
+
+    def _compute_weights(self):
+        """
+        Compute weights for each slice based on label probabilities.
+        Returns:
+            np.ndarray: Weights for all slices in the dataset.
+        """
+        slice_weights = []
+        for volume_idx, slice_idx in self.dataset.slice_info:
+            _, label_path = self.dataset.image_label_pairs[volume_idx]
+            label_volume = self.dataset.load_volume(label_path)
+            label_slice = self.dataset.extract_slice(label_volume, slice_idx)
+            
+            # Count the occurrences of each class in the slice
+            class_counts = {k: np.sum(label_slice == k) for k in self.label_probabilities.keys()}
+            
+            # Compute the slice weight as the sum of the weighted probabilities
+            slice_weight = sum(class_counts[k] * self.label_probabilities[k] for k in class_counts)
+            slice_weights.append(slice_weight)
+        
+        # Normalize weights
+        slice_weights = np.array(slice_weights)
+        return slice_weights / np.sum(slice_weights)
+
+    def __iter__(self):
+        """
+        Create an iterator that samples indices based on computed weights.
+        Returns:
+            Iterator[int]: Indices for sampling.
+        """
+        return iter(np.random.choice(len(self.dataset), size=self.num_samples, p=self.slice_weights))
+
+    def __len__(self):
+        """
+        Return the total number of samples to draw.
+        Returns:
+            int: Total number of samples.
+        """
+        return self.num_samples
 
 
 class BrainMRISliceDataset(Dataset):
@@ -257,3 +318,4 @@ class BrainMRISliceDataset(Dataset):
             image_slice = image_slice.clone().detach().to(torch.float32)
 
         return image_slice, label_slice, volume_idx, slice_idx
+
