@@ -333,3 +333,27 @@ def save_model_config_to_file(model, file_path="model_config.json"):
     # Save as JSON
     with open(file_path, "w") as f:
         json.dump(model_config, f, indent=4)
+        
+def export_to_nii(array, file_path, spacing, affine=None):
+    """
+    Export a NumPy array to a NIfTI file with specified spacing and affine.
+
+    Args:
+        array (numpy.ndarray): The array to export.
+        file_path (str): Path to save the NIfTI file.
+        spacing (tuple): Spacing of the image in each dimension.
+        affine (numpy.ndarray, optional): Affine transformation matrix.
+    """
+    # Cast the array to a supported data type
+    array = array.astype(np.int32)  # Or np.float32, depending on your needs
+
+    # Create a default affine if none is provided
+    if affine is None:
+        affine = np.diag(spacing + (1.0,))
+
+    # Create a NIfTI image
+    nifti_image = nib.Nifti1Image(array, affine)
+
+    # Save the image to the specified file path
+    nib.save(nifti_image, file_path)
+    print(f"Saved NIfTI file to {file_path}")
