@@ -4,8 +4,8 @@ It is used to monitor the performance of the model during training and validatio
 """
 
 import numpy as np
-from scipy.spatial import cKDTree
 import torch
+from monai.metrics import compute_hausdorff_distance
 
 
 class MetricsMonitor:
@@ -257,44 +257,72 @@ def dice_score_3d(prediction, ground_truth, num_classes, smooth=1e-6):
 
 
 
-def hausdorff_distance(pred, masks, num_classes, is_3d=True):
+def hausdorff_distance(prediction, ground_truth, num_classes, include_background=False):
     """
-    Compute Hausdorff Distance (HD) for segmentation between prediction and ground truth masks.
+    Compute the Hausdorff Distance, handling missing classes to avoid NaN results.
 
     Args:
-        pred (torch.Tensor): Predicted mask.
-            - Shape for 2D: [H, W] or [B, H, W].
-            - Shape for 3D: [D, H, W] or [B, D, H, W].
-        masks (torch.Tensor): Ground truth mask.
-            - Shape for 2D: [H, W] or [B, H, W].
-            - Shape for 3D: [D, H, W] or [B, D, H, W].
-        num_classes (int): Number of classes in the segmentation.
-        is_3d (bool): Whether to compute 3D metrics. Defaults to True.
+        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X]).
+        ground_truth (torch.Tensor): Ground truth segmentation (shape: [batch_size, Z, Y, X]).
+        num_classes (int): Number of classes.
+        include_background (bool): Whether to include background class in the computation.
 
     Returns:
-        list: Hausdorff Distance for each class.
+        torch.Tensor: Hausdorff distance for each class.
     """
-    pred_np = pred.cpu().numpy()
-    masks_np = masks.cpu().numpy()
+    hausdorff_distances =  {class_id: 0.0 for class_id in range(num_classes)}
 
-    if pred_np.ndim == 4 and not is_3d:  # If batch is provided for 2D, process batch-wise
-        pred_np = pred_np[0]
-        masks_np = masks_np[0]
-
-    hd_per_class = []
-    for c in range(num_classes):
-        pred_coords = np.argwhere(pred_np == c)
-        masks_coords = np.argwhere(masks_np == c)
-
-        if not len(pred_coords) or not len(masks_coords):
-            hd_per_class.append(np.inf)
+    for class_id in range(num_classes):
+        if not include_background and class_id == 0:
             continue
 
-        pred_tree = cKDTree(pred_coords)
-        masks_tree = cKDTree(masks_coords)
+        # Binary masks for the current class
+        pred_class = (prediction == class_id).float()
+        gt_class = (ground_truth == class_id).float()
 
-        forward_hd = np.max(pred_tree.query(masks_coords, k=1)[0])
-        backward_hd = np.max(masks_tree.query(pred_coords, k=1)[0])
-        hd_per_class.append(max(forward_hd, backward_hd))
+        # Check if either the ground truth or prediction is empty
+        if gt_class.sum() == 0 or pred_class.sum() == 0:
+            hausdorff_distances.append(float('nan'))  # Append NaN for missing classes
+        else:
+            # Compute Hausdorff distance
+            hausdorff_dist = compute_hausdorff_distance(
+                pred_class.unsqueeze(0),
+                gt_class.unsqueeze(0),
+                include_background=True
+            )
+            hausdorff_distances[class_id] = hausdorff_dist.mean().item()
 
-    return hd_per_class
+    return hausdorff_distances
+
+
+def average_volumetric_difference(prediction, ground_truth, num_classes):
+    """
+    Compute the Average Volumetric Difference (AVD) for multi-class 3D volumes.
+
+    Args:
+        prediction (torch.Tensor): Predicted segmentation (shape: [batch_size, Z, Y, X]).
+        ground_truth (torch.Tensor): Ground truth segmentation (shape: [batch_size, Z, Y, X]).
+        num_classes (int): Number of classes.
+
+    Returns:
+        dict: Average Volumetric Difference for each class.
+    """
+    if isinstance(prediction, torch.Tensor):
+        prediction = prediction.cpu().numpy()
+    if isinstance(ground_truth, torch.Tensor):
+        ground_truth = ground_truth.cpu().numpy()
+
+    # Ensure shapes match
+    assert prediction.shape == ground_truth.shape, (
+        f"Shape mismatch: prediction {prediction.shape}, ground_truth {ground_truth.shape}"
+    )
+
+    avd_scores = {class_id: 0.0 for class_id in range(num_classes)}
+
+    for class_id in range(num_classes):
+        pred_volume = np.sum(prediction == class_id)
+        gt_volume = np.sum(ground_truth == class_id)
+
+        avd_scores[class_id] = abs(pred_volume - gt_volume) / (gt_volume + 1e-6)
+
+    return avd_scores
