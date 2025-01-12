@@ -141,5 +141,4 @@ __pycache__/
 *.pyc
 Data/
 *.pth
-results/
 manual_mflow.py
