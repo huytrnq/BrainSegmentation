@@ -27,52 +27,38 @@ DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_availabl
 NUM_WORKERS = 8
 LR = 0.01
 N_TEST = 5
+SLICE_AXIS = 0
 
 if __name__ == '__main__':    
     print(f"Using device: {DEVICE}")
     #################### DataLoaders #################### 
 
     train_transform = A.Compose([
-        A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
-        A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
-        # Spatial Transformations
-        # A.OneOf([
-        #     A.Affine(scale=(0.8, 1.2), translate_percent=(0.1, 0.2), rotate=(-30, 30), p=1.0),  # Scaling, Rotation, Shearing
-        # ], p=0.5),  # 50% chance to apply one of the spatial transforms
-
-        # # Other Transformations
-        # A.OneOf([
-        #     A.HorizontalFlip(p=1.0),  # Mirroring
-        #     A.VerticalFlip(p=1.0),  # Mirroring
-        # ], p=0.5),
-
         # Normalize and convert to tensors
+        A.Normalize(mean=(0,), std=(1,), max_pixel_value=1.0, p=1.0),
         RobustZNormalization(),
         ToTensorV2()
     ], additional_targets={'mask': 'mask'})  # Include mask augmentation
 
     test_transform = A.Compose([
-        # A.Resize(256, 256),
-        A.LongestMaxSize(max_size=256),  # Resize the smallest side to 256, keeping the aspect ratio
-        A.PadIfNeeded(min_height=256, min_width=256, border_mode=0, value=0),  # Pad to a square image
-        # A.Normalize(normalization="min_max", p=1.0),
+        A.Normalize(mean=(0,), std=(1,), max_pixel_value=1.0, p=1.0),
         RobustZNormalization(),
         ToTensorV2()
     ], additional_targets={'mask': 'mask'})
 
-    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=2, transform=train_transform, cache=True, ignore_background=False)
-    label_probabilities = {0: 1, 1: 3, 2: 2, 3: 2}  # Example: More focus on class 1
+    train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=SLICE_AXIS, transform=train_transform, cache=True, ignore_background=False)
+    label_probabilities = {0: 1, 1: 1, 2: 1, 3: 1}  # Example: More focus on class 1
     # Create the sampler
     sampler = WeightedLabelSampler(dataset=train_dataset, label_probabilities=label_probabilities)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, sampler=sampler)
 
-    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=2, transform=test_transform, cache=True, ignore_background=False)
+    val_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'val'), slice_axis=SLICE_AXIS, transform=test_transform, cache=True, ignore_background=False)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
 
     #################### Model ####################
     
     model = smp.Unet(
-        encoder_name="efficientnet-b5",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+        encoder_name="efficientnet-b4",        # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
         encoder_weights="imagenet",     # use `imagenet` pre-trained weights for encoder initialization
         in_channels=1,                  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
         classes=4,                      # model output channels (number of classes in your dataset)
@@ -80,9 +66,9 @@ if __name__ == '__main__':
     # model = UNETR(in_channels=1, out_channels=4, img_size=256, feature_size=32, norm_name='batch', spatial_dims=2)
     model = model.to(DEVICE)
     
-    class_weights = train_dataset._get_class_weights(num_classes=4)
+    # class_weights = train_dataset._get_class_weights(num_classes=4)
     #################### Loss, Optimizer, Scheduler ####################
-    criterion = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5, class_weights=class_weights).to(DEVICE)
+    criterion = DiceCrossEntropyLoss(dice_weight=0.5, ce_weight=0.5, class_weights=None).to(DEVICE)
     # criterion = DiceFocalLoss(alpha=[0.05, 0.50, 0.25, 0.20], gamma=1.5, is_3d=False, ignore_background=False)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-7)
@@ -91,16 +77,17 @@ if __name__ == '__main__':
     # Monitors
     train_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     val_monitor = MetricsMonitor(
-        metrics=["loss", "dice_score"], patience=50, mode="max"
+        metrics=["loss", "dice_score"], patience=50, mode="max", export_path=f"best_model_axis_{SLICE_AXIS}.pth"
     )
     test_monitor = MetricsMonitor(metrics=["loss", "dice_score"])
     
     # Start MLflow tracking
-    mlflow.start_run(run_name="2D Unet EfficientNet-B3")
+    mlflow.start_run(run_name="2D Unet EfficientNet-B4")
     #################### MLflow ####################
     mlflow.log_param("model", model.__class__.__name__)
+    mlflow.log_param("label_probabilities", label_probabilities)
     mlflow.log_param("backbone", "efficientnet-b5")
-    mlflow.log_param("type", "2D slice_axis 2")
+    mlflow.log_param("type", f"2D slice_axis {SLICE_AXIS}")
     mlflow.log_param("batch_size", BATCH_SIZE)
     mlflow.log_param("epochs", EPOCHS)
     mlflow.log_param("learning_rate", LR)
