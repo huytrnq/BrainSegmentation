@@ -24,10 +24,16 @@ ROOT_DIR = './Data/'
 BATCH_SIZE = 16
 EPOCHS = 200
 DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
-NUM_WORKERS = 8
+NUM_WORKERS = 16
 LR = 0.01
 N_TEST = 5
-SLICE_AXIS = 0
+SLICE_AXIS = 1
+if SLICE_AXIS == 0:
+    input_size = (128, 256)
+elif SLICE_AXIS == 1:
+    input_size = (256, 256)
+else:
+    input_size = (256, 128)
 
 if __name__ == '__main__':    
     print(f"Using device: {DEVICE}")
@@ -47,7 +53,7 @@ if __name__ == '__main__':
     ], additional_targets={'mask': 'mask'})
 
     train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=SLICE_AXIS, transform=train_transform, cache=True, ignore_background=False)
-    label_probabilities = {0: 1, 1: 1, 2: 1, 3: 1}  # Example: More focus on class 1
+    label_probabilities = {0: 1, 1: 1, 2: 1, 3: 1} 
     # Create the sampler
     sampler = WeightedLabelSampler(dataset=train_dataset, label_probabilities=label_probabilities)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, sampler=sampler)
@@ -159,8 +165,8 @@ if __name__ == '__main__':
     #################### 3D Evaluation ####################
     # Split the predictions and labels into volumes
     predictions = torch.argmax(predictions, dim=1).numpy()
-    predictions = np.array(predictions).reshape(N_TEST, -1, 256, 256)
-    labels = np.array(labels).reshape(N_TEST, -1, 256, 256)
+    predictions = np.array(predictions).reshape(N_TEST, -1, *input_size)
+    labels = np.array(labels).reshape(N_TEST, -1, *input_size)
     dices = dice_score_3d(predictions, labels, num_classes=4)
     print(dices)
     mlflow.log_metric("3d_dice_score", np.mean(list(dices.values())))
