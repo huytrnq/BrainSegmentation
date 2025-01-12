@@ -15,11 +15,9 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="torchio")
 
 from utils.utils import train_3d, validate_3d, save_model_config_to_file
-from utils.vis import plot_mri
 from utils.dataset import BrainMRIDataset
 from utils.loss import DiceCrossEntropyLoss, DiceFocalLoss
-from models import UNet3D, AttentionUNet
-from monai.networks.nets import UNet, SegResNet, UNETR
+from monai.networks.nets import UNet
 
 if __name__ == '__main__':
     #################### Hyperparameters ####################
@@ -28,7 +26,7 @@ if __name__ == '__main__':
     PATEINCE = 50
     EPOCHS = 300
     NUM_CLASSES = 4
-    NUM_WORKERS=16
+    NUM_WORKERS = 16
     DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
     LR = 0.01
     MODEL_CONFIG_PATH = 'model_config.json'
@@ -37,6 +35,10 @@ if __name__ == '__main__':
     # TorchIO transformations for augmentation
     train_transform = tio.Compose([
         # tio.RandomElasticDeformation(num_control_points=7, locked_borders=2),
+        tio.RandomFlip(axes=(0, 1, 2)),
+        tio.RandomBiasField(coefficients=(0.1, 0.5), order=3),
+        tio.RandomGamma(log_gamma=(-0.3, 0.3)),
+        
         tio.RescaleIntensity((0, 1)),
         tio.ZNormalization(),
     ])
@@ -65,19 +67,13 @@ if __name__ == '__main__':
             norm="instance",  # Use Instance Normalization
             dropout=0.1       # Add dropout
         )
-    # model = SegResNet(
-    #     blocks_down=[1, 2, 2, 4],
-    #     blocks_up=[1, 1, 1],
-    #     init_filters=16,
-    #     in_channels=1,
-    #     out_channels=4,
-    #     dropout_prob=0.2,
-    # )
+
     model = model.to(DEVICE)
     save_model_config_to_file(model, MODEL_CONFIG_PATH)
 
     #################### Loss, Optimizer, Scheduler ####################
-    criterion = DiceFocalLoss(alpha=[0.05, 0.5, 0.25, 0.35], gamma=2, is_3d=True, ignore_background=False, focal_weight=0.5, dice_weight=0.5)
+    # criterion = DiceFocalLoss(alpha=[0.05, 0.5, 0.25, 0.35], gamma=2, is_3d=True, ignore_background=False, focal_weight=0.5, dice_weight=0.5)
+    criterion = DiceCrossEntropyLoss(is_3d=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-9)
     
@@ -90,10 +86,10 @@ if __name__ == '__main__':
     mlflow.log_param("model", model.__class__.__name__)
     # Loss
     mlflow.log_param("criterion", criterion.__class__.__name__)
-    mlflow.log_param("alpha", criterion.alpha)
-    mlflow.log_param("gamma", criterion.gamma)
-    mlflow.log_param("focal_weight", criterion.focal_weight)
-    mlflow.log_param("dice_weight", criterion.dice_weight)
+    # mlflow.log_param("alpha", criterion.alpha)
+    # mlflow.log_param("gamma", criterion.gamma)
+    # mlflow.log_param("focal_weight", criterion.focal_weight)
+    # mlflow.log_param("dice_weight", criterion.dice_weight)
     # Transformer
     mlflow.log_param("train_transform", train_transform.transforms)
     mlflow.log_param("val_transform", val_transform.transforms)

@@ -4,7 +4,7 @@ import numpy as np
 import mlflow.pytorch
 
 class Predictor:
-    def __init__(self, model=None, device='cpu', patch_size=None, mlflow_model_uri=None):
+    def __init__(self, model=None, device='cpu', patch_size=None, mlflow_model_uri=None, num_classes=4):
         """
         Initialize the Predictor class.
 
@@ -13,9 +13,11 @@ class Predictor:
             device (str): Device to perform inference ('cuda', 'cpu', etc.).
             patch_size (int, optional): Patch size for patch-based inference.
             mlflow_model_uri (str, optional): URI of the MLflow model to load.
+            num_classes (int): Number of classes for segmentation
         """
         self.device = device
         self.patch_size = patch_size
+        self.num_classes = num_classes
         
         if mlflow_model_uri:
             self.model = mlflow.pytorch.load_model(mlflow_model_uri).to(device)
@@ -83,3 +85,51 @@ class Predictor:
         else:
             prediction = torch.argmax(aggregator.get_output_tensor(), dim=0)  # Aggregate predictions
         return prediction.cpu()
+    
+    def predice_slices(self, dataloader, proba=False, plane='axial', n_volumes=5):
+        """
+        Perform slice-wise prediction for all subjects in a dataloader.
+
+        Args:
+            dataloader (torch.utils.data.DataLoader): Dataloader for the dataset.
+            proba (bool): Whether to return probabilities.
+            plane (str): Plane for slice-wise prediction ('axial', 'coronal', or 'sagittal').
+            n_volumes (int): Number of volumes to predict.
+            
+        Returns:
+            list: List of predicted segmentation slices or probabilities for each subject.
+        """
+        self.model.eval()
+        predictions = []
+        
+        if plane == 'axial':
+            input_shape = (128, 256)
+        elif plane == 'coronal':
+            input_shape = (256, 256)
+        elif plane == 'sagittal':
+            input_shape = (256, 128)
+        else:
+            raise ValueError("Invalid plane. Must be 'axial', 'coronal', or 'sagittal'.")
+
+        with torch.no_grad():
+            for (images, masks, volume_idx, slice_idx) in dataloader:
+                images = images.to(self.device)
+                outputs = self.model(images)
+                predictions.append(outputs)
+        
+        predictions = torch.cat(predictions, dim=0)
+        if proba:
+            predictions = torch.softmax(predictions, dim=1).view(n_volumes, -1, self.num_classes, *input_shape)
+        else:
+            predictions = torch.argmax(predictions, dim=1)
+        
+        if plane == 'axial':
+            predictions = predictions.permute(0, 2, 1, 3, 4)
+        elif plane == 'coronal':
+            predictions = predictions.permute(0, 2, 3, 1, 4)
+        elif plane == 'sagittal':
+            predictions = predictions.permute(0, 2, 3, 4, 1)
+        else:
+            raise ValueError("Invalid plane. Must be 'axial', 'coronal', or 'sagittal'.")
+        
+        return predictions.cpu()

@@ -29,7 +29,7 @@ if __name__ == '__main__':
     NUM_CLASSES = 4
     NUM_WORKERS = 16
     DEVICE = 'mps' if torch.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu'
-    PATCH_SIZE = 64
+    PATCH_SIZE = 128
     QUEUE_LENGTH = 200
     LR = 0.01
     MODEL_CONFIG_PATH = 'model_config.json'
@@ -37,7 +37,10 @@ if __name__ == '__main__':
     #################### DataLoaders ####################
     train_transform = tio.Compose([
         # tio.RandomElasticDeformation(num_control_points=(7, 7, 7), max_displacement=(4, 4, 4)),
-        # tio.RandomFlip(axes=(0, 1, 2)),
+        tio.RandomFlip(axes=(0, 1, 2)),
+        tio.RandomBiasField(coefficients=(0.1, 0.5), order=3),
+        tio.RandomGamma(log_gamma=(-0.3, 0.3)),
+        
         tio.RescaleIntensity((0, 1)),
         tio.ZNormalization(),
     ])
@@ -58,7 +61,7 @@ if __name__ == '__main__':
         patch_size=PATCH_SIZE,
         label_probabilities=label_probabilities,
     )
-
+    # Create a queue to store patches
     patches_queue = tio.Queue(
         subjects_dataset=train_dataset,
         max_length=QUEUE_LENGTH,
@@ -68,7 +71,7 @@ if __name__ == '__main__':
         shuffle_subjects=True,
         shuffle_patches=True,
     )
-
+    # Create a DataLoader that will iterate over patches
     train_loader = tio.SubjectsLoader(patches_queue, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
     
     #################### Model ####################
@@ -130,7 +133,6 @@ if __name__ == '__main__':
 
         if val_avg_dice > best_avg_dice:
             best_avg_dice = val_avg_dice
-            mlflow.log_param("best_avg_dice", best_avg_dice)
             torch.save(model.state_dict(), 'best_model_3d.pth')
             print(f'Best model saved with dice score: {best_avg_dice}\n')
     

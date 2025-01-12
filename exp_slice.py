@@ -9,7 +9,6 @@ import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
-from monai.networks.nets import UNet, AttentionUnet, UNETR
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -53,7 +52,7 @@ if __name__ == '__main__':
     ], additional_targets={'mask': 'mask'})
 
     train_dataset = BrainMRISliceDataset(os.path.join(ROOT_DIR, 'train'), slice_axis=SLICE_AXIS, transform=train_transform, cache=True, ignore_background=False)
-    label_probabilities = {0: 1, 1: 1, 2: 1, 3: 1} 
+    label_probabilities = {0: 1, 1: 4, 2: 2, 3: 2}
     # Create the sampler
     sampler = WeightedLabelSampler(dataset=train_dataset, label_probabilities=label_probabilities)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, sampler=sampler)
@@ -173,3 +172,5 @@ if __name__ == '__main__':
     mlflow.log_metric("3d_wm_dice_score", dices[1])
     mlflow.log_metric("3d_gm_dice_score", dices[2])
     mlflow.log_metric("3d_csf_dice_score", dices[3])
+    # End MLflow Run
+    mlflow.end_run()

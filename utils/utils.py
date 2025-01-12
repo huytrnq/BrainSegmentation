@@ -7,7 +7,7 @@ import numpy as np
 import nibabel as nib
 import torch
 import torchio as tio
-from utils.metric import dice_coefficient, dice_score_3d
+from utils.metric import dice_coefficient, dice_score_3d, hausdorff_distance, average_volumetric_difference
 
 
 def train(model, train_loader, criterion, optimizer, device, monitor):
@@ -357,3 +357,47 @@ def export_to_nii(array, file_path, spacing, affine=None):
     # Save the image to the specified file path
     nib.save(nifti_image, file_path)
     print(f"Saved NIfTI file to {file_path}")
+    
+
+def evaluate_segmentation(predictions, ground_truth, num_classes, include_background=True):
+    """
+    Evaluate segmentation performance using Dice score, Hausdorff Distance, and Average Volumetric Difference.
+
+    Args:
+        predictions (torch.Tensor): Predicted labels with shape [N, D, H, W].
+        ground_truth (torch.Tensor): Ground truth labels with shape [N, D, H, W].
+        num_classes (int): Number of segmentation classes.
+        include_background (bool): Whether to include the background class in the evaluation.
+
+    Returns:
+        dict: A dictionary containing Dice scores, Hausdorff Distances, and Average Volumetric Differences.
+    """
+    # Compute Dice scores
+    dice = dice_score_3d(predictions, ground_truth, num_classes)
+    mean_dice = np.mean(list(dice.values())[1:])
+
+    # Compute Hausdorff Distances
+    hd = hausdorff_distance(predictions, ground_truth, num_classes, include_background=include_background)
+    mean_hd = np.mean(list(hd.values())[1:])
+
+    # Compute Average Volumetric Differences
+    avd = average_volumetric_difference(predictions, ground_truth, num_classes)
+    mean_avd = np.mean(list(avd.values())[1:])
+
+    # Print results
+    print(f"Dice scores: {dice}")
+    print(f"Mean Dice score: {mean_dice}")
+    print(f"Hausdorff Distances: {hd}")
+    print(f"Mean Hausdorff Distance: {mean_hd}")
+    print(f"Average Volumetric Differences: {avd}")
+    print(f"Mean Average Volumetric Difference: {mean_avd}")
+
+    # Return metrics
+    return {
+        "Dice": dice,
+        "Mean Dice": mean_dice,
+        "Hausdorff Distances": hd,
+        "Mean Hausdorff Distance": mean_hd,
+        "Average Volumetric Differences": avd,
+        "Mean Average Volumetric Difference": mean_avd,
+    }
