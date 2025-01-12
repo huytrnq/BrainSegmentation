@@ -345,7 +345,7 @@ def export_to_nii(array, file_path, spacing, affine=None):
         affine (numpy.ndarray, optional): Affine transformation matrix.
     """
     # Cast the array to a supported data type
-    array = array.astype(np.int32)  # Or np.float32, depending on your needs
+    array = array.astype(np.int8)  # Or np.float32, depending on your needs
 
     # Create a default affine if none is provided
     if affine is None:
