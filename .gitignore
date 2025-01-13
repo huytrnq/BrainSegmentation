@@ -142,3 +142,4 @@ __pycache__/
 Data/
 *.pth
 manual_mflow.py
+.DS_Store
