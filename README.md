@@ -4,12 +4,13 @@ This repository is a collection of scripts and notebooks for brain segmentation 
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Data](#data)
-3. [Preprocessing](#preprocessing)
-4. [Model](#model)
-5. [Training](#training)
-6. [Evaluation](#evaluation)
-7. [Results](#results)
-8. [Conclusion](#conclusion)
+3. [Structure](#structure)
+4. [Preprocessing](#preprocessing)
+5. [Model](#model)
+6. [Training](#training)
+7. [Evaluation](#evaluation)
+8. [Results](#results)
+9. [Conclusion](#conclusion)
 
 ## Introduction
 This project aims to segment the brain from MRI images using deep learning
@@ -19,6 +20,19 @@ The dataset used in this study is the IBSR18, containing 18 T1-weighted scans of
 
 ![IBSR18](./images/IBSR18.png)
 <p align="center">Figure 1: IBSR18 dataset</p>
+
+## Structure
+The repository is structured as follows:
+- `images/`: Contains images used in the README.
+- `notebooks/`: Jupyter notebooks for data exploration, model training, and evaluation.
+- `results/`: Contains the results of the experiments conducted.
+- `utils/`: Utility scripts for data loading, preprocessing, and model evaluation, etc.
+- `exp_full_volume.py`: Script for training full volume segmentation models.
+- `exp_patch.py`: Script for training patch-based segmentation models.
+- `exp_slice.py`: Script for training slice-based segmentation models.
+- `exp_patch_cv.py`: Script for training patch-based segmentation models with cross-validation.
+- `requirements.txt`: Required Python packages for the project.
+
 
 ## Preprocessing
 
