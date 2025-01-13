@@ -42,12 +42,12 @@ The dataset used in this study is the IBSR18, containing 18 T1-weighted scans of
     - Normalize patches and apply augmentations.
     - Z-score normalization standardizes pixel intensities.
     - Weighted sampling prioritizes regions with brain tissue to improve sensitivity.
-<div style="display: flex; justify-content: space-around; text-align: center;">
-    <figure>
-        <img src="images/segmentation_strategies.png" alt="segmentation_strategies" width="250px">
-        <figcaption><b>Figure 2: Segmentation Strategies</b></figcaption>
-    </figure>
-</div>
+
+<p align="center">
+  <img src="images/segmentation_strategies.png" alt="Axial" width="300">
+  <br>
+  <b>Figure 2: Segmentation Strategies</b>
+</p>
 
 ## Model
 The repository includes several deep learning architectures evaluated for brain MRI segmentation:
@@ -104,20 +104,15 @@ Below are the results obtained from the experiments conducted on the IBSR18 data
 
 ### Final Brain Tissue Segmentation Visualized Along Separate Axes
 
-<div style="display: flex; justify-content: space-around; text-align: center;">
-    <figure>
-        <img src="images/axial.png" alt="Axial" width="150px">
-        <figcaption><b>Axial</b></figcaption>
-    </figure>
-    <figure>
-        <img src="images/coronal.png" alt="Coronal" width="150px">
-        <figcaption><b>Coronal</b></figcaption>
-    </figure>
-    <figure>
-        <img src="images/sagittal.png" alt="Sagittal" width="150px">
-        <figcaption><b>Sagittal</b></figcaption>
-    </figure>
-</div>
+<p align="center">
+  <img src="images/axial.png" alt="Axial" width="200">
+  <img src="images/coronal.png" alt="Coronal" width="200">
+  <img src="images/sagittal.png" alt="Sagittal" width="200">
+</p>
+
+<p align="center">
+  <b>Figure 3: Final Brain Tissue Segmentation Visualized Along Separate Axes</b>
+</p>
 
 ## Conclusion
 The experiments demonstrated the effectiveness of deep learning for brain tissue segmentation:
