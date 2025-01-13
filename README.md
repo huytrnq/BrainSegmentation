@@ -42,9 +42,12 @@ The dataset used in this study is the IBSR18, containing 18 T1-weighted scans of
     - Normalize patches and apply augmentations.
     - Z-score normalization standardizes pixel intensities.
     - Weighted sampling prioritizes regions with brain tissue to improve sensitivity.
-
-![Segmentation Strategies](./images/segmentation_strategies.png)
-<p align="center">Figure 2: Segmentation Strategies</p>
+<div style="display: flex; justify-content: space-around; text-align: center;">
+    <figure>
+        <img src="images/segmentation_strategies.png" alt="segmentation_strategies" width="250px">
+        <figcaption><b>Figure 2: Segmentation Strategies</b></figcaption>
+    </figure>
+</div>
 
 ## Model
 The repository includes several deep learning architectures evaluated for brain MRI segmentation:
@@ -103,15 +106,15 @@ Below are the results obtained from the experiments conducted on the IBSR18 data
 
 <div style="display: flex; justify-content: space-around; text-align: center;">
     <figure>
-        <img src="images/axial.png" alt="Axial" width="400px">
+        <img src="images/axial.png" alt="Axial" width="150px">
         <figcaption><b>Axial</b></figcaption>
     </figure>
     <figure>
-        <img src="images/coronal.png" alt="Coronal" width="400px">
+        <img src="images/coronal.png" alt="Coronal" width="150px">
         <figcaption><b>Coronal</b></figcaption>
     </figure>
     <figure>
-        <img src="images/sagittal.png" alt="Sagittal" width="400px">
+        <img src="images/sagittal.png" alt="Sagittal" width="150px">
         <figcaption><b>Sagittal</b></figcaption>
     </figure>
 </div>
