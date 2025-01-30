@@ -1,5 +1,5 @@
 # Brain Segmentation
-This repository is a collection of scripts and notebooks for brain segmentation using deep learning which is part of the project for the course "Medical Image Segmentation" at the University of Girona on my Master's degree.
+This repository is a collection of scripts and notebooks for brain segmentation using deep learning which is part of the project/challenge for the course "Medical Image Segmentation" at the University of Girona on my Master's degree.
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -84,7 +84,7 @@ The training pipeline supports:
     - Average Volume Difference (AVD): Quantifies volume discrepancies.
 
 ## Results
-Below are the results obtained from the experiments conducted on the IBSR18 dataset.
+Below are the results obtained from the experiments conducted on the IBSR18 validation dataset.
 ### Slice-Based Segmentation Evaluation
 
 | **Experiments**            | **Dice Score (CSF)** | **Dice Score (GM)** | **Dice Score (WM)** | **Dice Score (Avg)** | **HD (CSF)** | **HD (GM)** | **HD (WM)** | **HD (Avg)** | **AVD (CSF)** | **AVD (GM)** | **AVD (WM)** | **AVD (Avg)** |
@@ -116,6 +116,8 @@ Below are the results obtained from the experiments conducted on the IBSR18 data
 | Patch 128 + Sampler   | 0.9277              | 0.9455              | 0.9381             | 0.9371              | 14.8209      | 58.5632     | 7.6742      | 27.0194      | 0.0194        | 0.0200       | 0.0096       | 0.0163        |
 | Ensemble              | **0.9305**          | **0.9517**          | **0.9470**         | **0.9430**          | **8.5560**   | 7.9178      | **7.0091**  | **7.8276**   | 0.0213        | 0.0128       | **0.0047**   | 0.0130        |
 
+**Final results show that the ensemble of patch-based models achieved the highest Dice score (**0.9430**), lowest Hausdorff Distance (**7.8276**), and consistent AVD (**0.0130**), which reached 0.933 on the private test set and achieved 2nd place in the competition.**
+
 ### Final Brain Tissue Segmentation Visualized Along Separate Axes
 
 <p align="center">
@@ -138,3 +140,4 @@ The experiments demonstrated the effectiveness of deep learning for brain tissue
 - **Patch-Based Segmentation**: Smaller patches (64x64x64) with a data sampler showed strong performance. The ensemble of patch-based models achieved the highest Dice score (**0.9430**), lowest Hausdorff Distance (**7.8276**), and consistent AVD (**0.0130**).
 
 In summary, data samplers and ensemble strategies were critical in addressing class imbalance and improving segmentation accuracy, while augmentation showed limited benefit. 
+
